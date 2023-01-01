@@ -1,0 +1,150 @@
+
+Looking at the Comms on the HKC - I have so far deduced the following:
+
+There are 3 Wires used only (+5V, GND, DATA and the fourth wire is unused and gorunded)
+
+Panel is standard rs232 8,n,2 @ aprox 1658 baud. It is unencrypted.
+The Extra Party bit is used to determine the first byte of the message.
+
+The message format is 
+
+[Frame|device message is for][command][data][data][..][checksum]
+
+
+Panel talks - correct keypad responds.
+
+Panel uses Framing counter 0,1,2,3 to prevent missed frames and allows resending missing data
+
+
+Each keypad has compiled into it a unique serial number - when scanning for keypads a single byte id is given instead.
+Keypad with ID#0 has some extra work to do over others - eg. only he acks the display message even though all keypads display the message.
+
+
+Keys are sent not as ascii but as follows:
+  //Keys are sent as the following: (msb 3 bits are row - lsb 3 bits are column)
+  if (c == '1') return 0x01; //		   001
+  if (c == '2') return 0x02; //		   010
+  if (c == '3') return 0x04; //		   100
+  if (c == '4') return 0x11; //		 10001
+  if (c == '5') return 0x12; //		 10010
+  if (c == '6') return 0x14; //		 10100
+  if (c == 'Q') return 0x18; //		 11000		(not always sent?)
+  if (c == '7') return 0x21; //		100001
+  if (c == '8') return 0x22; //		100010
+  if (c == '9') return 0x24; //		100100
+  if (c == 'Y') return 0x28; // 	101000		(not always sent?)
+  if (c == '*') return 0x31; //		110001
+  if (c == '0') return 0x32; //		110010
+  if (c == '#') return 0x34; //		110100
+  if (c == 'N') return 0x38; //		111000
+
+  
+  When displaying text - the high bit is set if the keypad is to flash the text - flash is not implemented due to limited html space we have.
+  
+  
+  
+  The commands are as follows:
+  
+  #0: a ping from panel - requesting any keypressess
+      /* Command#0: ping
+        K0 00 01 01 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+        P  A1 00 A1 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:!.!#####################
+        K1 21 00 60 FF FF FF 7E -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:!.`...~#################
+        P  A2 00 A2 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:"."#####################
+        K2 22 00 62 FF FF FF 81 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:".b....#################
+        P  A0 00 A0 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+        K0 20 00 62 FF FF FF 7F -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..b....#################
+      */
+		
+		Slave replies with the following information
+		
+        		   	              7|6|5|4|3|2|1|0
+					              | | | | | | | | 
+		                       ---| | | | | | | |--- 
+		Record On              -----| | | | | |----- Front tamper open
+		Play On                -------|	| | |------- Back tamper open
+		Backlight On           ---------| |--------- Device reset
+		  
+		I always send 0x60 for normal. have seen 60(Play+Rec)(0110,0000)  , 70(Play+Rec+Backlight) = 0111,0000   72(Play+Rec+Backlight+TamperF)(0111,0010)   78(0111,1000) just after tamper happens
+	  
+  #1: display a message
+      /* Command#1: Display message
+      P  C0 01 20 54 75 65 20 32 37 20 4A 61 6E 20 32 30 BA 30 39 76 -- -- -- --:@..Tue.27.Jan.20:09v####
+      K0 00 01 01 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      */
+
+	  
+  #2: not needed for our purposes
+
+  #3: not needed for our purposes
+      /* Command#3 Possibly to light leds or sound buzzer?
+      Green and Red were lit
+      P  C0 03 33 3F 35 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@.3?5###################
+      K0 00 03 03 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      P  D0 03 33 3F 45 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:P.3?E###################
+      K0 10 03 13 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      P  C0 03 33 3F 35 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@.3?5###################
+      K0 00 03 03 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      //Enter service menu - only Green Led Lit
+      P  D0 03 03 3F 15 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:P..?.###################
+      K0 10 03 13 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      P  A0 00 A0 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      K0 20 00 72 FF FF FF 8F -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..r....#################
+      P  C0 01 0C 53 65 72 76 69 63 65 20 4D 65 6E 75 20 20 20 20 D3 -- -- -- --:@..Service.Menu....S####
+      */
+	  
+    #4: Unknown - not needed for our purposes
+	
+	#5: Scanning - installing a new keypad
+      /* scanning start - 3 devices all logs ON
+        P  C0 01 00 D3 E3 E1 EE EE E9 EE E7 A0 CB E5 F9 F0 E1 E4 F3 E3 -- -- -- --:@..Scanning.Keypadsc####  //Message to All
+        K0 00 01 01 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //RKP0 Always responds (only RKP0)
+        P  A0 00 A0 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //Ack P0 -> RKP0
+        K0 20 00 72 FF FF FF 8F -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..r....#################  //K0 responds (0x72 - tamper was open)
+        P  81 00 81 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //Ack P0 -> RKP1
+        K1 01 00 70 FF FF FF 6E -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..p...n#################  //K1 responds (0x70 - No tamper reported)
+        P  B0 00 B0 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:0.0#####################  //Ack P0 -> RKP0 (again?? why)
+        K0 30 00 72 FF FF FF 9F -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:0.r....#################  //K0 responds (0x72 - tamper)
+       *P  D0 05 D5 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:P.U#####################  //Panel Skips C0 - sends D0 command 05 (no one acks)      //All devices enter scan mode
+        P  8F 06 95 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //Panel Sends      8F  command 06 to ALL                  //Next?
+        K1 0F 06 41 C7 08 01 26 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..AG..&#################  //K1 Responds      0F  command 06            41 C7 08 01  //08C741 is the number written on the chip sticker - 01=version
+        P  9F 07 01 41 C7 08 01 B8 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...AG..8################  //Panel sends      9F          07         01 41 C7 08 01  //Assign 01 to RKP
+        K1 11 07 00 18 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:....####################  //K1 Responds      11(RKP1)    07         00              //k1 says ok
+        P  8F 06 95 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //Panel sends      8F  command 06                         //Next?
+        K0 0F 06 87 BC 08 01 61 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...<..a#################  //K0               0F  command 06            87 BC 08 01
+        P  9F 07 00 87 BC 08 01 F2 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:....<..r################  //Panel            9F  command 07         00 87 BC 08 01  //Assign 00 to RKP
+        K0 10 07 00 17 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:....####################  //K0               10(RKP0)    07         00 17           //k0 says ok
+        P  8F 06 95 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //PanelFirstTo2    8F          06                         //Next?
+        K2 0F 06 91 CF 08 01 7E -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...O..~#################  //K2               0F          06            91 CF 08 01  //08CF91 is the number written on the chip sticker
+        P  9F 07 02 91 CF 08 01 11 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:....O...################  //Panel Assign ID  9F          07         02 91 CF 08 01  //Assign 02 to RKP
+        K2 12 07 00 19 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:....####################  //K2               12(RKP2)    07         00              //k1 says ok
+        P  92 09 9B -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //P                92          09                         //Panel requests version number
+        K2 12 09 00 00 01 04 20 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:.......#################  //K2               12(RKP2)    09         00 00 01 04     //keypad says its v1.4
+        P  8F 06 95 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //P                8F          06                         //Next? (no response)
+        P  8F 06 95 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //P                8F          06                         //Next? (no response)
+        P  A2 00 A2 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:"."#####################  //PollK2           A2          00
+        K2 22 00 6A FF FF FF 89 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:".j....#################  //K2               22          00     6A FF FF FF    //no keys
+        P  D0 01 0F 44 65 76 69 63 65 73 20 66 6F 75 6E 64 20 33 20 52 -- -- -- --:P..Devices.found.3.R####
+      */
+
+	#6: when scanning - this is a request for all keypads serial number - only one responds
+      /*Request Serial - should wait here some time before sending
+        P  8F 06 95 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################  //Panel Sends      8F  command 06 to ALL                  //Next?
+        K1 0F 06 41 C7 08 01 26 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..AG..&#################  //K1 Responds      0F  command 06            41 C7 08 01  //08C741 is the number written on the chip sticker - 01=version
+      */
+
+	#7: assign an id to a keypad
+      /* Command#7: Assign ID
+      P  9F 07 01 41 C7 08 01 B8 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...AG..8################  //Panel sends      9F          07         01 41 C7 08 01  //Assign 01 to RKP
+      K1 11 07 00 18 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:....####################  //K1 Responds      11(RKP1)    07         00              //k1 says ok
+      */
+
+	#0x0C: not needed for our purposes. Happens when you press 0 - screen clears //P  00 0C 0C
+	
+	#0x0D: not needed for our purposes. Happens when entering engineer mode	//P  D0 0D FF DC
+	
+	#0x0F: not needed for our purposes. Happens when leaving engineer mode //P C0 0F 00 3F 0E   Leaving eng mode
+	
+	
+	
+	  
