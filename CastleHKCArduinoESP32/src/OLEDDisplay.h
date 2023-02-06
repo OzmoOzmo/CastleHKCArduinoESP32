@@ -46,6 +46,7 @@
 #define JUMPTABLE_WIDTH 3
 #define JUMPTABLE_START 4
 
+//Font Header info (see fontData)
 #define WIDTH_POS 0
 #define HEIGHT_POS 1
 #define FIRST_CHAR_POS 2
@@ -86,7 +87,16 @@
 
 #define displayWidth 128
 #define displayHeight 32
-#define displayBufferSize (128 * 32 / 8)
+#define displayBufferSize (displayWidth * displayHeight / 8)
+
+enum OLEDDISPLAY_GEOMETRY {
+  GEOMETRY_128_64   = 0,    // **this one.
+  GEOMETRY_128_32   = 1,
+  GEOMETRY_64_48    = 2,
+  GEOMETRY_64_32    = 3,
+  GEOMETRY_RAWMODE  = 4
+};
+#define geometry GEOMETRY_128_32
 
 #include <Wire.h>
 

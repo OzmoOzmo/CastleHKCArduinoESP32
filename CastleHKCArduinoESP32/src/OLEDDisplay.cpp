@@ -1,5 +1,6 @@
 /**
- * Greatly reduced code for LCD display - Based on code found on https://thingpulse.com
+ * Greatly reduced code for LCD display - Based on code found on Github
+ * at: https://github.com/ThingPulse/esp8266-oled-ssd1306/blob/master/src/OLEDDisplay.cpp
  *
  */
 
@@ -89,7 +90,11 @@ void OLEDDisplay::sendInitCommands(void) {
   sendCommand(displayHeight - 1);
   sendCommand(SETDISPLAYOFFSET);
   sendCommand(0x00);
-  sendCommand(SETSTARTLINE);
+  //sendCommand(SETSTARTLINE);
+  if(geometry == GEOMETRY_64_32)
+    sendCommand(0x00);
+  else
+    sendCommand(SETSTARTLINE);
   sendCommand(CHARGEPUMP);
   sendCommand(0x14);
   sendCommand(MEMORYMODE);
@@ -97,9 +102,16 @@ void OLEDDisplay::sendInitCommands(void) {
   sendCommand(SEGREMAP);
   sendCommand(COMSCANINC);
   sendCommand(SETCOMPINS);
-  sendCommand(0x02); //GEOMETRY_128_32
+  //sendCommand(0x02); //GEOMETRY_128_32
+  if (geometry == GEOMETRY_128_64 || geometry == GEOMETRY_64_48 || geometry == GEOMETRY_64_32)
+    sendCommand(0x12);
+  else if (geometry == GEOMETRY_128_32)
+    sendCommand(0x02);
   sendCommand(SETCONTRAST);
-  sendCommand(0x8F); //GEOMETRY_128_32
+  if (geometry == GEOMETRY_128_64 || geometry == GEOMETRY_64_48 || geometry == GEOMETRY_64_32)
+    sendCommand(0xCF);
+  else if (geometry == GEOMETRY_128_32)
+    sendCommand(0x8F);
   sendCommand(SETPRECHARGE);
   sendCommand(0xF1);
   sendCommand(SETVCOMDETECT); //0xDB, (additionally needed to lower the contrast)
@@ -190,7 +202,7 @@ void OLEDDisplay::display(void)
     sendCommand(PAGEADDR);
     sendCommand(0x0);
 
-    sendCommand(0x3); //GEOMETRY_128_32
+    sendCommand(geometry); //0x3 for GEOMETRY_128_32
 
     for (uint16_t i = 0; i < displayBufferSize; i++) {
         Wire.beginTransmission(this->_address);
