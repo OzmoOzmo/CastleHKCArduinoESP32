@@ -29,6 +29,17 @@ Both available online from aliexpress and other sources from about $5 each.
 
 Note: I have added a 10uF capacitor between GND and Reset - this is a recommended fix to make it more reliable to flash new software to the ESP.
 
+![Circuit](https://raw.githubusercontent.com/OzmoOzmo/CastleHKCArduinoESP32/main/Docs/IMG_5684.jpg)
+  
+A goes to ESP32 Receive (Esp Pin 16)  
+B goes to Panel RKP GND and also ESp32 GND  
+C goes to ESP32 Transmit (Esp Pin 27)  
+D goes to Panels RKP port +12V  
+E goes to Panels RKP data  
+  
+![HKC Connection](https://github.com/OzmoOzmo/CastleHKCArduinoESP32/blob/main/Docs/HKCPinOut.JPG?raw=true)
+
+
 ![Wiring Diagram](https://github.com/OzmoOzmo/CastleHKCArduinoESP32/blob/main/Docs/CircuitDiagram_ESP32.png)
 
 
