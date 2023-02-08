@@ -1,7 +1,7 @@
 /*
  * Created: 3/30/2014 11:35:06 PM
  *
- *   Aritech Alarm Panel Arduino Internet Enabled Keypad -  CS350 - CD34 - CD72 - CD91 and more
+ *   HKC Alarm Panel Arduino Internet Enabled Keypad
  *
  *   For Arduino (UNO or Leonardo) with added Ethernet Shield
  *

@@ -2,10 +2,10 @@
  * WebSocket.cpp - Websocket Implementation - works on most modern browsers and Mobile Phones
  *
  * Created: 3/30/2014 9:57:39 PM
+ * Modified:6/02/2023 Modified For ESP32
  *
- *   Aritech Alarm Panel Arduino Internet Enabled Keypad -  CS350 - CD34 - CD72 - CD91 and more
+ *   HKC Alarm Panel Arduino Internet Enabled Keypad
  *
- *   For ESP32
  *
  *   See Circuit Diagram for wiring instructions
  *
@@ -13,6 +13,8 @@
  *
  *   See: http://www.boards.ie/vbulletin/showthread.php?p=88215184
  *
+ *   Modified:6/02/2023 For ESP32
+ * 
 */
 
 #define WEBSERVER
@@ -20,45 +22,24 @@
 
 
 #include "LOG.h"
-#include <WiFi.h>
-#include <Preferences.h>
+static const char *TAG = "WS";
 
 #include "WebSocket.h"
 #include "RKP.h"  //for PushKey
-#include <sstream>
 
 int WebSocket::nConnectState = WIFI_DOWN; //0 = no wifi  1= wificonnecting 2=wifi+sockets ok
-char WebSocket::dispBufferLast[DISP_BUF_LEN + 1] = "RKP Unitialised";
-String WebSocket::sIPAddr = "";
-String WebSocket::escapedMac = "";
+String WebSocket::sIPAddr = ""; //for reporting and Alexa
 
 #ifdef WEBSERVER
+#include <esp_http_server.h>
+#include <lwip/sockets.h>
 #include <WiFi.h>
-//#include <ESPmDNS.h>
-#include <HTTPRequest.hpp>
-#include <HTTPResponse.hpp>
-#include <WebsocketHandler.hpp>
-#include <WebsocketNode.hpp>
 
-#include "Alexa.h"
-
-
-#ifdef HTTPS
-	#include <HTTPSServer.hpp>
-	#include <SSLCert.hpp>
-  
-	httpsserver::SSLCert* cert; //our server certificate
-	httpsserver::HTTPSServer* secureServer; //the server
-#else
-    #include <HTTPServer.hpp>
-	httpsserver::HTTPServer* secureServer; //the server
-#endif
+httpd_handle_t WebSocket::server = NULL;
 
 #ifdef ALEXA
 	#include "Alexa.h"
 #endif
-
-extern Preferences prefs;
 
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
@@ -71,26 +52,25 @@ extern Preferences prefs;
 
 const String htmlSite =
 "<!DOCTYPE html>"
-"<html><head><title>Castle</title>"
+"<html><head><title>Castle ESP32 HKC</title>"
 "<meta name='viewport' content='width=320, initial-scale=1.8, user-scalable=no'>" //"no" as screen unzooms when press button
-"<style>.long{height: 64px;} button{height: 35px;width: 35px;}</style>"
+"<style>.long{height:64px;} button{height: 35px;width: 35px;}</style>"
 "</head><body>"
 "<div style='border: 5px solid black; width: 180px;'>&nbsp;<div id=msg1 style='float:left'>%</div><div id=msg2 style='float:right'>%</div></div>"
 "<table id='table'>"
-"<tr><td><button>1</button></td><td><button>2</button></td><td><button>3</button></td><td rowspan=2><button class=long>Y</button></td></tr>"
+"<tr><td><button>1</button></td><td><button>2</button></td><td><button>3</button></td><td rowspan=2><button class=long>Q</button></td></tr>"
 "<tr><td><button>4</button></td><td><button>5</button></td><td><button>6</button></td></tr>"
-"<tr><td><button>7</button></td><td><button>8</button></td><td><button>9</button></td><td rowspan=2><button class=long>N</button></td></tr>"
-"<tr><td><button value='*'>" KEY_STAR "</button></td><td><button>0</button></td><td><button value='#'>" KEY_POUND "</button></td></tr>"
+"<tr><td><button>7</button></td><td><button>8</button></td><td><button>9</button></td><td><button>Y</button></td></tr>"
+"<tr><td><button value='*'>" KEY_STAR "</button></td><td><button>0</button></td><td><button value='#'>" KEY_POUND "</button></td><td><button>N</button></td></tr>"
 "</table>"
 "<script defer>var ws;"
 "function ge(x){return document.getElementById(x);}\n"
 "function st(x,y){ge('msg1').innerText=x;ge('msg2').innerText=y?y:' ';}\n"
 "try{"
-"ws = new WebSocket('" WS "://'+location.hostname+'/sock');"
+"ws = new WebSocket('" WS "://'+location.hostname+'/ws');"
 "ws.onmessage = function(evt){var d=evt.data.split('|');st(d[0],d[1]);}\n"
 "ws.onerror = function(evt){st('ERR:' + evt.data,'');}\n"
 "ws.onclose = function(evt){st('Connection Closed','');}\n"
-"ws.onopen = function(){ws.send('r');}\n"
 //pc keyboard support
 "document.body.onkeydown = function(e){ws.send(String.fromCharCode(e.keyCode));}\n"
 //buttons on html
@@ -98,195 +78,281 @@ const String htmlSite =
 "} catch(ex) {alert(ex.message);}\n"
 "</script></body></html>";
 
-// As websockets are more complex, they need a custom class that is derived from WebsocketHandler
-class WebSockHandler : public httpsserver::WebsocketHandler {
-public:
-	static WebsocketHandler* create();
-	void onMessage(httpsserver::WebsocketInputStreambuf* input);
-	//]void initialize(httpsserver::ConnectionContext* con);
-	void onClose();
+/* Root HTTP GET handler */
+static esp_err_t root_get_handler(httpd_req_t *req)
+{
+	const char* pStr = htmlSite.c_str();
+	httpd_resp_sendstr(req, pStr);
+    return ESP_OK;
+
+	//todo: for nicer initial display... we can replacing % with the current rkp display - need do memory efficiently
+	//int i1 = htmlSite.indexOf('%');
+	//int i2 = htmlSite.indexOf('%', i1 + 1);
+	/*httpd_resp_send(req, (char*)pStr, i1); //first part
+	httpd_resp_send(req, (char*)RKPClass::dispBufferLast,16); //first 15 characters - everything up to |
+	httpd_resp_send(req, (char*)(pStr+i1+1), i2-i1-1); //second part
+	httpd_resp_send(req, (char*)(RKPClass::dispBufferLast+17), DISP_BUF_LEN-17); //alarm etc
+	httpd_resp_send(req, (char*)(pStr + i2 + 1), htmlSite.length()- (i2 + 1) ); //third part to end
+	*/
+	//int maxLen = htmlSite.length()+ DISP_BUF_LEN; //a tad more than needed when you remove the %s's from htmlSite
+	//char str[maxLen];
+	//memcpy(str, (char*)pStr, i1); //first part
+	//memcpy(str+i1, (char*)RKPClass::dispBufferLast, 16); //first 15 characters - everything up to |
+	//memcpy(req, (char*)(pStr+i1+1), i2-i1-1); //second part
+	//httpd_resp_send(req, (char*)(RKPClass::dispBufferLast+17), DISP_BUF_LEN-17); //alarm etc
+	//httpd_resp_send(req, (char*)(pStr + i2 + 1), htmlSite.length()- (i2 + 1) ); //third part to end
+	//sprintf(char *str, const char *format, ...)
+	//httpd_resp_sendstr(req, pStr);
+
+	//httpd_resp_set_hdr( req, "Connection", "close"); //get chrome to close unneeded sockets
+    //const char* resp_str = (const char*) req->user_ctx;
+    //httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+}
+
+
+//For WS: Structure holding server handle and internal socket fd in order to use out of request send
+struct async_resp_arg {
+    httpd_handle_t hd;
+    int fd;
 };
-// Max clients to be connected to the chat
-WebSockHandler* activeClients[MAX_CLIENTS];
 
-httpsserver::WebsocketHandler* WebSockHandler::create() {
-	//Send welcome message handler->send(dispBufferLast, SEND_TYPE_TEXT);
-	WebSockHandler* handler = new WebSockHandler();
-	int i=0;
-	for (; i < MAX_CLIENTS; i++) {
-		if (activeClients[i] == nullptr) {
-			activeClients[i] = handler;
-			Logf("New client! :%d\n", i);
-			break;
-		}
+
+//called from queue async when its time to send message
+static void ws_async_send(void* arg)
+{
+	static const char* data = RKPClass::dispBuffer;
+	struct async_resp_arg* resp_arg = (async_resp_arg*)arg;
+	httpd_handle_t hd = resp_arg->hd;
+	int fd = resp_arg->fd;
+	httpd_ws_frame_t ws_pkt;
+	memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+	ws_pkt.payload = (uint8_t*)data;
+	ws_pkt.len = DISP_BUF_LEN; //strlen(data);
+	ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+	httpd_ws_send_frame_async(hd, fd, &ws_pkt);
+	free(resp_arg);
+}
+
+//Websocket Start Handler
+static esp_err_t ws_handler(httpd_req_t* req)
+{
+    if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        return ESP_OK;
+    }
+    httpd_ws_frame_t ws_pkt;
+    uint8_t *buf = NULL;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    /* Set max_len = 0 to get the frame len */
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
+        return ret;
+    }
+    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
+    if (ws_pkt.len) {
+        /* ws_pkt.len + 1 is for NULL termination as we are expecting a string */
+        buf = (unsigned char*)(void*)calloc(1, ws_pkt.len + 1);
+        if (buf == NULL) {
+            ESP_LOGE(TAG, "Failed to calloc memory for buf");
+            return ESP_ERR_NO_MEM;
+        }
+        ws_pkt.payload = buf;
+        // Set max_len = ws_pkt.len to get the frame payload
+        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
+            free(buf);
+            return ret;
+        }
+        ESP_LOGI(TAG, "Got packet with message: %s (%d).", ws_pkt.payload, ws_pkt.payload[0]);
+		RKPClass::PushKey((char)ws_pkt.payload[0]);
+    }
+    /*ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
+    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT &&
+        strcmp((char*)ws_pkt.payload,"Trigger async") == 0) {
+        free(buf);
+        return trigger_async_send(req->handle, req);
+    }
+	*/
+	free(buf);
+	//At Initialisation - Send initial screen (last display message we got from panel)
+	ws_pkt.payload = (byte*)RKPClass::dispBufferLast;
+	ws_pkt.len = strlen(RKPClass::dispBufferLast);
+    ret = httpd_ws_send_frame(req, &ws_pkt);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
+		return ret;
+    }
+
+	
+	{//this calls - static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
+		struct async_resp_arg* resp_arg = (async_resp_arg*)(void*)malloc(sizeof(struct async_resp_arg));
+		resp_arg->hd = req->handle; //same as ::server
+		resp_arg->fd = httpd_req_to_sockfd(req); //]need keep fd - this this is req->aux->sd->fd
+		esp_err_t ret = httpd_queue_work(WebSocket::server, ws_async_send, resp_arg);
+
+		Logf("New fd is %d\n", resp_arg->fd);
 	}
-	if (i == MAX_CLIENTS)
+
+	FlagDisplayUpdate();
+	return ret;
+}
+
+//this is the favicon image
+static esp_err_t image_get_handler(httpd_req_t *req)
+{
+	// Set Content-Type
+	httpd_resp_set_hdr(req, "Content-Type", "image/vnd.microsoft.icon");
+	// Binary data for the favicon
+	const char FAVICON_DATA[] = 
 	{
-		Logf("Too many Clients!:%d\n", i);
-	}
+		0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x08, 0x09, 0x02, 0x00, 0x01, 0x00, 0x01, 0x00, 0x78, 0x00,
+		0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00,
+		0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0xc1, 0x1e,
+		0x00, 0x00, 0xc1, 0x1e, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x9c, 0x00, 0x00, 0x00, 0x9c, 0x00, 0x00, 0x00, 0x88, 0x00,
+		0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0xa2, 0x00, 0x00, 0x00, 0x88, 0x00, 0x00, 0x00, 0xa2, 0x00,
+		0x00, 0x00, 0xeb, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+		
+    //httpd_resp_set_hdr( req, "Connection", "close"); //get chrome to close unneeded sockets (doesnt work)
+	#define FAVICON_LENGTH (sizeof(FAVICON_DATA)/sizeof(FAVICON_DATA[0]))
+    httpd_resp_send(req, FAVICON_DATA, FAVICON_LENGTH);
 
-	//quick count...
-	gClients = 0;
-	for (int i = 0; i < MAX_CLIENTS; i++)
-		if (activeClients[i] != nullptr)
-			gClients++;
-	FlagDisplayUpdate();
-	return handler;
+    return ESP_OK;
 }
 
-// When the websocket is closing, we remove the client from the array
-void WebSockHandler::onClose() {
-	for (int i = 0; i < MAX_CLIENTS; i++) {
-		if (activeClients[i] == this) {
-			activeClients[i] = nullptr;
-			Logf("Close client :%d",i);
-		}
-		else if (activeClients[i] != nullptr) //else used because one closing will be null 
-			gClients++;
-	}
-	//quick count...
-	gClients = 0;
-	for (int i = 0; i < MAX_CLIENTS; i++)
-		if (activeClients[i] != nullptr)
-			gClients++;
-	FlagDisplayUpdate();
-}
+static const httpd_uri_t root = {
+	.uri       = "/",
+	.method    = HTTP_GET,
+	.handler   = root_get_handler,
+	.user_ctx  = (void *)"Hello World!" //http page to send
+};
 
-// send s to all other clients
-void WebSockHandler::onMessage(httpsserver::WebsocketInputStreambuf* inbuf) {
-	// Get the input message
-	std::ostringstream ss;
-	ss << inbuf;
-	std::string payload = ss.str();
-	LogLn(payload.c_str());
-	RKPClass::PushKey(payload.c_str()[0]);
-}
+static const httpd_uri_t ws = {
+	.uri        = "/ws",
+	.method     = HTTP_GET,
+	.handler    = ws_handler,
+	.user_ctx   = NULL,
+	.is_websocket = true
+};
 
+static const httpd_uri_t icon = {
+    .uri       = "/favicon.ico",
+    .method    = HTTP_GET,
+    .handler   = image_get_handler,
+    .user_ctx  = NULL
+};
+
+
+esp_err_t fnSocketOpen(httpd_handle_t hd, int sockfd)
+{//here when socket opens - hd will be same as WebSocket::server
+    Logf("Open Socket: hd = %p sockfd = %d \n", hd, sockfd);
+    return ESP_OK;
+}
+void fnSocketClose(httpd_handle_t hd, int sockfd)
+{//here when socket closes
+    printf("Close Socket: hd = %p sockfd = %d\n", hd, sockfd);
+}
 
 //initialise what we can before wifi starts
 void WebSocket::ServerInit()
 {
-	#ifdef HTTPS
-	const char* PKName = "PK";
-	const char* CertName = "CERT";
-	const char* dn = "CN=castle.local,O=castle,C=IE";
-	size_t pkLen = prefs.getBytesLength(PKName);
-	size_t certLen = prefs.getBytesLength(CertName);
-	if (pkLen && certLen)
-	{
-		LogLn("Found Cert In NVM");
-		//create in heap
-		uint8_t* pkBuffer = new uint8_t[pkLen];
-		prefs.getBytes(PKName, pkBuffer, pkLen);
-		uint8_t* certBuffer = new uint8_t[certLen];
-		prefs.getBytes(CertName, certBuffer, certLen);
+	LogLn("===");
+    server = NULL;
 
-		cert = new httpsserver::SSLCert(certBuffer, certLen, pkBuffer, pkLen);
-		#if DUMP_KEYS
-		Serial.println("Retrieved Private Key " + String(cert->getPKLength()));
-		for (int i = 0; i < cert->getPKLength(); i++)
-			Serial.print(cert->getPKData()[i], HEX);
-		Serial.println();
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.lru_purge_enable = true; // added for webserver
+	config.server_port = IP_P;
+	config.max_open_sockets = 10; // defaults to 7
+	config.open_fn = fnSocketOpen;
+    config.close_fn = fnSocketClose;
 
-		Serial.println("Retrieved Certificate " + String(cert->getCertLength()));
-		for (int i = 0; i < cert->getCertLength(); i++)
-			Serial.print(cert->getCertData()[i], HEX);
-		Serial.println();
+    // Start the httpd server
+    ESP_LOGI(TAG, "Starting app");
+    ESP_ERROR_CHECK(esp_netif_init()); //todo: needed?
+    ESP_ERROR_CHECK(esp_event_loop_create_default()); //todo: needed?
+
+	Logf("Starting server on port: %d\n", config.server_port);
+    if (httpd_start(&server, &config) == ESP_OK) {
+        // Registering the ws handler
+        ESP_LOGI(TAG, "Registering URI handlers");
+        httpd_register_uri_handler(server, &ws);
+
+        // Set URI handlers for HTTP webpages
+        ESP_LOGI(TAG, "Registering WWW handlers");
+        httpd_register_uri_handler(server, &root);
+        httpd_register_uri_handler(server, &icon);
+
+        #if CONFIG_EXAMPLE_BASIC_AUTH
+        httpd_register_basic_auth(server);
+        #endif
+
+		#ifdef ALEXA
+		void serveDescription(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
+		void handleAlexaApiCall(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
+
+		secureServer->registerNode(new httpsserver::ResourceNode("/description.xml", "GET", &serveDescription));
+		secureServer->setDefaultNode(new httpsserver::ResourceNode("", "", &handleAlexaApiCall));
 		#endif
-		LogLn("Cert Loaded");
-	}
-	else
-	{
-		LogLn("Generating certificate");
-		cert = new httpsserver::SSLCert();
-		int result = httpsserver::createSelfSignedCert(*cert, httpsserver::KEYSIZE_1024, dn);
-		if (result != 0)
-			LogLn("Error :(");
-		else{
-			LogLn("Generated OK");
-			prefs.putBytes(PKName, (uint8_t*)cert->getPKData(), cert->getPKLength());
-			prefs.putBytes(CertName, (uint8_t*)cert->getCertData(), cert->getCertLength());
-			LogLn("Cert Stored");
-		}
-	}
-	
-	secureServer = new httpsserver::HTTPSServer(cert);
-	#else
-	secureServer = new httpsserver::HTTPServer();
-	#endif
 
-	LogLn("===");
-	WebSocket::escapedMac = WiFi.macAddress(); //eg. "30:AE:A4:27:84:14";
-	LogLn("mac raw: " + WebSocket::escapedMac); //30:AE:A4:27:84:14
-	WebSocket::escapedMac.replace(":", "");
-	WebSocket::escapedMac.toLowerCase();
-	WebSocket::escapedMac[0] = DEVICEHUB_ID; //manual change to mac
-	LogLn ("Mac: " + WebSocket::escapedMac);
-	LogLn("===");
+    	ESP_LOGI(TAG, "WebSvr Started");
+        return;
+    }
 
-		
-	httpsserver::ResourceNode* nodeRoot = new httpsserver::ResourceNode("/", "GET",
-		[](httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res)
-		{//root hander
-			String sClientIP = req->getClientIP().toString();
-			std::string sReq = req->getRequestString();
-			Log("[" + sClientIP + "] GET root");
+    ESP_LOGI(TAG, "Error starting server!");
+    return;
 
-			//this is more memory efficient - writes, replacing % with the current rkp display
-			int i1 = htmlSite.indexOf('%');
-			int i2 = htmlSite.indexOf('%', i1 + 1);
-			const char* pStr = htmlSite.c_str();
-			res->write((byte*)pStr, i1); //first part
-			res->write((byte*)dispBufferLast,16); //first 15 characters - everything up to |
-			res->write((byte*)pStr+i1+1, i2-i1-1); //second part
-			res->print(dispBufferLast+17); //alarm etc
-			res->print(pStr + i2 + 1); //third part to end
-			res->finalize();
-		});
-	secureServer->registerNode(nodeRoot);
-	
-	httpsserver::ResourceNode* nodeFavicon = new httpsserver::ResourceNode("/favicon.ico", "GET",
-	[](httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res) {
-			// Set Content-Type
-			res->setHeader("Content-Type", "image/vnd.microsoft.icon");
-			// Binary data for the favicon
-			byte FAVICON_DATA[] = 
-			{
-				0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x08, 0x09, 0x02, 0x00, 0x01, 0x00, 0x01, 0x00, 0x78, 0x00,
-				0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00,
-				0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0xc1, 0x1e,
-				0x00, 0x00, 0xc1, 0x1e, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x9c, 0x00, 0x00, 0x00, 0x9c, 0x00, 0x00, 0x00, 0x88, 0x00,
-				0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0xa2, 0x00, 0x00, 0x00, 0x88, 0x00, 0x00, 0x00, 0xa2, 0x00,
-				0x00, 0x00, 0xeb, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-			};
-		
-			#define FAVICON_LENGTH (sizeof(FAVICON_DATA)/sizeof(FAVICON_DATA[0]))
-			
-			res->write(FAVICON_DATA, FAVICON_LENGTH);
-		}
-	);
-	secureServer->registerNode(nodeFavicon);
-	
-	#ifdef ALEXA
-	void serveDescription(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
-	void handleAlexaApiCall(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
-
-	secureServer->registerNode(new httpsserver::ResourceNode("/description.xml", "GET", &serveDescription));
-	secureServer->setDefaultNode(new httpsserver::ResourceNode("", "", &handleAlexaApiCall));
-	#endif
-
-
-
-	// Add sock node like folder node
-	httpsserver::WebsocketNode* websockNode = new httpsserver::WebsocketNode("/sock", &WebSockHandler::create);
-	secureServer->registerNode(websockNode);
-
-	LogLn("All Done Init");
 }
 #endif
+//Send something to connected browser
+bool WebSocket::WebSocket_send()
+{
+	LogLn("Send");
+	for (int i=0; i<CONFIG_LWIP_MAX_SOCKETS; ++i)
+	{
+		struct sockaddr addr; //?struct sockaddr_in6 addr;
+		socklen_t addr_size = sizeof(addr);
+		int sock = LWIP_SOCKET_OFFSET + i;
+		int res = getpeername(sock, &addr, &addr_size);
+		//if (res == 0) {
+		//	//ESP_LOGI(TAG, "sock: %d -- addr: %x, port: %d", sock, addr.sin6_addr.un.u32_addr[3], addr.sin6_port);        
+		//	//ESP_LOGI(TAG, "Addr: %s Family: %d", addr.sa_data, (int)addr.sa_family_t);
+		//	ESP_LOGI(TAG, "sock: %d Family: %d", sock, (int)(addr.sa_family));
+		//}
+
+		#define DoAsyncSync //async only supported right now
+		#ifdef DoAsyncSync
+		{//this calls - static esp_err_t trigger_async_send(..) which calls httpd_ws_send_frame_async
+			struct async_resp_arg* resp_arg = (async_resp_arg*)(void*)malloc(sizeof(struct async_resp_arg));
+			resp_arg->hd = WebSocket::server;
+			resp_arg->fd = sock; //this is req->aux->sd->fd
+			esp_err_t ret = httpd_queue_work(WebSocket::server, ws_async_send, resp_arg);
+		}
+		#else
+		{//todo: code to send it right now.. possibly faster response?
+		    httpd_ws_frame_t ws_pkt;
+			uint8_t *buf = NULL;
+			memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+			ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+			ws_pkt.payload = (byte*)RKPClass::dispBuffer;
+			ws_pkt.len = DISP_BUF_LEN; //strlen(RKPClass::dispBuffer); //16+1+2+(/0)
+			
+			//if (httpd_ws_send_frame(WebSocket::server, &ws_pkt) != ESP_OK)
+			if (httpd_ws_send_frame_async(WebSocket::server, sock, &ws_pkt) != ESP_OK)
+			{
+				ESP_LOGE(TAG, "httpd_ws_send_frame failed");
+				closesocket(sock);
+			}
+		}
+		#endif
+	}
+	return true;
+}
 
 //this is called constantly to service network requests
 void WebSocket::EtherPoll()
@@ -295,16 +361,12 @@ void WebSocket::EtherPoll()
 		//No web server just yet
 		return;
 
-	//TODO: need test if this is enough to reset wifi connection if lost...
 	if (nConnectState != WIFI_PENDING && WiFi.status() != WL_CONNECTED) {
 		LogLn("EtherPoll-Wifi reconnect");
 		nConnectState = WIFI_DOWN; //switch to retry connecting to wifi again...
 		return;
 	}
 
-#ifdef WEBSERVER
-	secureServer->loop();//service webserver
-#endif
 #ifdef ALEXA
 	AlexaLoop();
 #endif
@@ -317,7 +379,6 @@ void WebSocket::StartWebServerMonitor()
 		[](void* parameter) {
 			while (true)
 			{
-				//Serial.println("Test Wifi");
 				WebSocket::Verify_WiFi();
 				delay(500);
 				#ifdef REPORT_STACK_SPACE
@@ -326,11 +387,11 @@ void WebSocket::StartWebServerMonitor()
 			}
 		},
 		"threadWIFI",     // Task name
-		5000,            // Stack size (bytes)
+		5000,             // Stack size (bytes)
 		NULL,             // Parameter
 		1,                // Task priority
 		NULL,             // Task handle
-		1                 //ARDUINO_RUNNING_CORE
+		1                 // ESP Core
 	);
 
 	xTaskCreatePinnedToCore(
@@ -353,7 +414,7 @@ void WebSocket::StartWebServerMonitor()
 		NULL,             // Parameter
 		1,                // Task priority
 		NULL,             // Task handle
-		1                 //ARDUINO_RUNNING_CORE
+		1                 // ESP Core
 	);
 
 	//Do all LCD updates in Wifi/WebServer/UI Thread
@@ -384,38 +445,21 @@ void WebSocket::StartWebServerMonitor()
 			}
 		},
 		"threadLCD",  // Task name
-			3000,            // Stack size (bytes)
-			NULL,             // Parameter
-			1,                // Task priority
-			NULL,             // Task handle
-			1                 //ARDUINO_RUNNING_CORE
+			3000,     // Stack size (bytes)
+			NULL,     // Parameter
+			1,        // Task priority
+			NULL,     // Task handle
+			1         // ESP Core
 		);
 }
 
-//Send something to connected browser
-bool WebSocket::WebSocket_send()
-{
-	const char* data = WebSocket::dispBufferLast;
-
-	// Send it back to every client
-	for (int i = 0; i < MAX_CLIENTS; i++) {
-		WebSockHandler* pClient = activeClients[i];
-		if (pClient != nullptr) {
-			pClient->send(data, httpsserver::WebsocketHandler::SEND_TYPE_TEXT);
-			//odd without next line - the compiler sends to only 1 handler... compiler bug?
-			Logf("Screen Sent to:%d\n",i);
-		}
-	}
-	//Very useful: LogHex((byte*)data,length);
-	return true;
-}
 
 // Start process to join a Wifi connection
 void WebSocket::WebSocket_WiFi_Init()
 {
-	//Wifi Password is defined in config.h
-	//gWifiStat = "Connecting: " WIFI_SSID; DisplayUpdate(); //ToScreen(0, "Connecting: " WIFI_SSID);
+	gWifiStat = "Wifi Init..." WIFI_SSID; FlagDisplayUpdate();
 
+	//Wifi Password is defined in config.h
 	IPAddress ip_me; ip_me.fromString(IP_ME);
 	IPAddress ip_gw; ip_gw.fromString(IP_GW);
 	IPAddress ip_sn; ip_sn.fromString(IP_SN);
@@ -455,37 +499,23 @@ void WebSocket::Verify_WiFi()
 		{//just got good wifi - set up socket server & web server
 			nConnectState = WIFI_OK;
 			LogLn("WiFi connected.");
+			
+		#ifdef WEBSERVER
+			//display on LCD
 			WebSocket::sIPAddr = WiFi.localIP().toString();
 			gWifiStat = "IP:" + WebSocket::sIPAddr + ":" + IP_P; FlagDisplayUpdate();
-			
-			/*
-			escapedMac = WebSocket::sMac; //this takes a copy
-			LogLn("mac raw: " + escapedMac); //30:AE:A4:27:84:14
-			escapedMac.replace(":", "");
-			escapedMac.toLowerCase();
+		#else
+			gWifiStat = "Webserver OFF"; FlagDisplayUpdate();
+		#endif
 
-			escapedMac[0] = DEVICEHUB_ID; //manual change to mac
-
-			Serial.println("Using Mac: " + escapedMac);*/
-
-
-
-#ifdef WEBSERVER
-			secureServer->start();
-			if (secureServer->isRunning())
-				Serial.println("Server ready.");
-			//start_mdns_service();
-#endif
-
-#ifdef ALEXA
+		#ifdef ALEXA
 			AlexaStart(secureServer);
-#endif
+		#endif
 			return;
 		}
 
 	if (WiFi.status() != WL_CONNECTED)
-	{
-		//failed to connect - try again
+	{//failed to connect - try again
 		LogLn(F("Retry connect Wifi"));
 		nConnectState = WIFI_DOWN;
 		return;

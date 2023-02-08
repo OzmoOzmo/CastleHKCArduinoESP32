@@ -9,8 +9,6 @@
 
 #include "Arduino.h"
 
-#include <SoftwareSerial.h>
-
 #define maxkeybufsize 8
 #define DISP_BUF_LEN 16+1+2		//16 characters - space - AW - and +1 will be added for Terminator0
 
@@ -32,14 +30,14 @@ class RKPClass
 {
  private:
 	static FIFO fifo;
-	static bool loop_PanelMon();
 	static void SerialInit();
 	static bool ReplyToPanel(byte* buf, int nBufLen);
-	static void loop_PanelMon_ProcessLine(byte* buf, int nBufLen);
-	
+	static inline int GetExpectedMsgLen(byte* buf, int nBufMax);
+
 public:
 	void static Poll();
 
+	static char dispBufferLast[]; //store of the display to send out
 	
 	//TODO: move private
 	void static SendItems();

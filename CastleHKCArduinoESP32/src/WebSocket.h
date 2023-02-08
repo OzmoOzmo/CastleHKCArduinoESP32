@@ -2,10 +2,13 @@
  * WebSocket.h
  *
  * Created: 3/30/2014 11:54:30 PM Ozmo
+ * Modified:6/02/2023 For ESP32
  */
 
 #ifndef WEBSOCKET_H_
 #define WEBSOCKET_H_
+
+typedef void* httpd_handle_t;
 
 class WebSocket
 {
@@ -21,9 +24,8 @@ class WebSocket
 
 		String static sIPAddr;
 		String static escapedMac;
+		static httpd_handle_t server;
 	    static int nConnectState; //0 = no wifi   1=waiting for wifi   2= wifi+sockets ok
-
-		static char dispBufferLast[]; //store of the display to send out
 };
 
 #endif /* WEBSOCKET_H_ */

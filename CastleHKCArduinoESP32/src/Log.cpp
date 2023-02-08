@@ -2,7 +2,7 @@
  *
  * Created: 3/30/2014 11:35:06 PM
  *
- *   Aritech Alarm Panel Arduino Internet Enabled Keypad -  CS350 - CD34 - CD72 - CD91 and more
+ *   HKC Alarm Panel Arduino Internet Enabled Keypad
  *
  *   For ESP32 
  *
@@ -43,7 +43,6 @@
 			Log(s[n], HEX);
 			Log(' ');
 		}
-		//LogLn("{end}");
 	}
 	void LogHex(byte* s , int len, boolean noNL)
 	{
@@ -82,11 +81,7 @@
 				{Log((char)c);} //brackets important
 			}
 			LogLn("");
-			//len-=l;
-			//if (len<=0)
-			//break;
 		}
-		//LogLn("{end}");
 	}
 #endif
 
@@ -104,16 +99,20 @@ void Log_Init()
 
 #ifdef ENABLE_DISPLAY
   #include "oleddisplay.h"
-  #include "WebSocket.h" //for the panel display buffer
+  #include "RKP.h" //for the panel display buffer
   
   OLEDDisplay display(0x3c, SCREEN_SDA, SCREEN_SCL);  // 18, 19 for my custom board - 5, 4 for ESP board with built in screen
-  
-  
+    
   void LCD_Init()
   {
+	//we use Pin 18 as power to display - means can plug in a 4 pin display with no soldering... these 4 pins are all together.
+	pinMode(18,OUTPUT); digitalWrite(18,HIGH);
+	Wire.begin(23, 19); //SDA, SCL
+
   	// Initialising the UI will init the display too.
   	display.init();
-  	//display.flipScreenVertically(); //if required
+
+  	display.flipScreenVertically(); //if required
   
   	//display.setFont(ArialMT_Plain_10);
   	//display.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -136,7 +135,7 @@ void Log_Init()
   	display.drawString(0, 0, "Wifi: " + String(gWifiStat));
   	display.drawString(0, 10, "Clients: " + String(gClients));
   	display.drawString(60, 10, "Status: " + (gPanelStat.length()==0? "Clear" : gPanelStat));
-  	display.drawString(0, 20, WebSocket::dispBufferLast);
+  	display.drawString(0, 20, RKPClass::dispBufferLast);
   	display.display();
   }
 

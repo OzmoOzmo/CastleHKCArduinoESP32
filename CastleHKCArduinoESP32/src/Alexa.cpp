@@ -2,6 +2,10 @@
 // 
 // 
 
+#include "config.h"
+
+#ifdef ALEXA
+
 #include "Alexa.h"
 
 // Includes for the server
@@ -156,8 +160,8 @@ void handleAlexaApiCall(httpsserver::HTTPRequest* _req, httpsserver::HTTPRespons
 			RKPClass::PushKey('0');
 			RKPClass::PushKey('1');
 			RKPClass::PushKey('1');
-			RKPClass::PushKey('2');
-			RKPClass::PushKey('2');
+			RKPClass::PushKey('1');
+			RKPClass::PushKey('1');
 
 		}
 		return;
@@ -254,3 +258,5 @@ void AlexaLoop() {
 		}
 	}
 }
+
+#endif //#ifdef alexa
