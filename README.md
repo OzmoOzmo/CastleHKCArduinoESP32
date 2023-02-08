@@ -29,10 +29,7 @@ Both available online from aliexpress and other sources from about $5 each.
 
 Note: I have added a 10uF capacitor between GND and Reset - this is a recommended fix to make it more reliable to flash new software to the ESP.
 
-![Wiring Diagram](https://raw.githubusercontent.com/OzmoOzmo/CastleHKCArduinoESP32/main/Docs/CircuitDiagram.png)
-
-
-
+![Wiring Diagram](https://github.com/OzmoOzmo/CastleHKCArduinoESP32/blob/main/Docs/CircuitDiagram_ESP32.png)
 
 
 *Note: This is the latest code for an ESP32 - supporting Wifi, Chrome, most phones and Gmail - An Arduino UNO version using Ethernet is also available*
