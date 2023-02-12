@@ -33,3 +33,5 @@
 
 # Visual Studio cache/options directory
 .vs/
+CastleHKCArduinoESP32/test/Castle ESP32 HKC.html
+CastleHKCArduinoESP32/src/Config_GIT.h

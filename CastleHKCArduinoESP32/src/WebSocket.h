@@ -7,6 +7,7 @@
 
 #ifndef WEBSOCKET_H_
 #define WEBSOCKET_H_
+#include "Arduino.h"
 
 typedef void* httpd_handle_t;
 
@@ -23,7 +24,6 @@ class WebSocket
 		void static ServerInit(); //initialise what can be before we have wifi
 
 		String static sIPAddr;
-		String static escapedMac;
 		static httpd_handle_t server;
 	    static int nConnectState; //0 = no wifi   1=waiting for wifi   2= wifi+sockets ok
 };

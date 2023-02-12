@@ -190,9 +190,11 @@ void RKPClass::Poll()
 				{
 					delay(50);
 					RKPClass::ReplyToPanel(buf, msgLen);
+					#ifdef DEBUG_SHOW_ALL_RX
 					//Log(bIsPanelMsg ? "P " : "K "); 
 					Log("OK: "); LogHex(buf, bufix); 
 					//Log(".");
+					#endif
 					bufix = 0; break; //as only one byte at a time goes into beffer before we test - cannot be anything left in buffer...
 				}
 			}
@@ -233,7 +235,7 @@ inline int RKPClass::GetExpectedMsgLen(byte* buf, int nBufMax)
 	if (nBufMax < 3)
 		return msglen; //not error - just not enough bytes yet
 
-	byte b0 = buf[0];
+	//byte b0 = buf[0];
 	byte b1 = buf[1];
 	
 	if (bIsPanelMsg)
@@ -370,7 +372,7 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 			P  C0 01 20 54 75 65 20 32 37 20 4A 61 6E 20 32 30 BA 30 39 76 -- -- -- --:@..Tue.27.Jan.20:09v####
 			K0 00 01 01 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
 			*/
-			byte addr = (b0 & 0x30) >> 4;
+			//byte addr = (b0 & 0x30) >> 4;
 			if (RKPID == 0x00)
 			{ // RKP0 only ever responds
 				byte r[3];
@@ -381,9 +383,9 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 				bSent = true;
 			}
 			// Make a note to send it to the Mobile Phone
-			dispBuffer[0] = RKPClass::mbIsPanelAlarm ? (char)'A' : (char)'_';
-			dispBuffer[1] = RKPClass::mbIsPanelWarning ? (char)'W' : (char)'_';
-			dispBuffer[2] = (char)' '; // always space
+			dispBuffer[0] = (char)'1'; // always green
+			dispBuffer[1] = RKPClass::mbIsPanelWarning ? (char)'1' : (char)'0';
+			dispBuffer[2] = RKPClass::mbIsPanelAlarm ? (char)'1' : (char)'0';
 			int n = 3;
 			for (; n < (16+3); n++) // always 16 characters
 			{
@@ -575,7 +577,7 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 			if (bIsScanning == 0)
 			{// our turn...
 
-				byte addr = (b0 & 0x0f);
+				//byte addr = (b0 & 0x0f);
 				// if (addr == 0x0f)
 				{ // ACK
 					byte r[8];
@@ -642,7 +644,7 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 
 	} // #if is from panel
 
-	return true;
+	return bSent;
 }
 
 // Actually sends the message
@@ -660,23 +662,18 @@ void RKPClass::SendToPanel(byte *r, int len)
 	if (len > 1){
 		//Need to SPACE other bytes
 		swSer.write(r+1, len-1, SWSERIAL_PARITY_SPACE);
-		/*for (int n=1;n<len;n++)
-		{
-			uint16_t i = r[n] + 256; 
-			swSer.write(i, SWSERIAL_PARITY_SPACE); //todo: optimise...
-		}*/
 	}
 	digitalWrite(LED_Stat, LOW);
 
 #ifdef DEBUG_SHOW_ALL_TX
-	//Log("Wrote:"); LogHex(r,len); //keep 
-	Log("A");
-	if (RKPID == 0xFF)
-		Log("?");
-	else
-		Log(RKPID);
-	Log(">");
-	LogHex(r, len); // Log((b0&0x10)==0?0:1);
+	Log("Wrote:"); LogHex(r,len); //keep 
+	//Log("A");
+	//if (RKPID == 0xFF)
+	//	Log("?");
+	//else
+	//	Log(RKPID);
+	//Log(">");
+	//LogHex(r, len); // Log((b0&0x10)==0?0:1);
 #endif
 }
 

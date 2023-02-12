@@ -99,49 +99,61 @@ void Log_Init()
 
 #ifdef ENABLE_DISPLAY
   #include "oleddisplay.h"
+  #include "OLEDDisplaySSD1306Wire.h"
   #include "RKP.h" //for the panel display buffer
+  #include "config.h" //for pin assignments
   
-  OLEDDisplay display(0x3c, SCREEN_SDA, SCREEN_SCL);  // 18, 19 for my custom board - 5, 4 for ESP board with built in screen
+#define SCREEN_SDA 5 //SDA
+#define SCREEN_SCL 4 //SCL
+SSD1306Wire display(0x3c, SCREEN_SDA, SCREEN_SCL, GEOMETRY_128_64);
     
   void LCD_Init()
   {
-	//we use Pin 18 as power to display - means can plug in a 4 pin display with no soldering... these 4 pins are all together.
+	//we can use Pin 18 as power to display - means can plug in a 4 pin oled display with no soldering... these 4 pins are all in a row together.
 	pinMode(18,OUTPUT); digitalWrite(18,HIGH);
-	Wire.begin(23, 19); //SDA, SCL
-
-  	// Initialising the UI will init the display too.
-  	display.init();
-
-  	display.flipScreenVertically(); //if required
-  
-  	//display.setFont(ArialMT_Plain_10);
-  	//display.setTextAlignment(TEXT_ALIGN_LEFT);
-  	//display.setLogBuffer(5, 30);
+	
+  	//display.flipScreenVertically(); //if required
+	display.init(); // Initialising the UI will init the display too.
     DisplayUpdateDo();
   	LogLn("LCD Started");
   }
   
-  //Send update to LCD only (not to WebSockets) 
-  //send to Websockets only if rkp screen changes
+  //Send update to LCD only (not to WebSockets)
   void FlagDisplayUpdate()
   {
-  	bDisplayToSend = true;
+	bDisplayToSend = true;
   }
   
   
   void DisplayUpdateDo()
   {
   	display.clear();
-  	display.drawString(0, 0, "Wifi: " + String(gWifiStat));
-  	display.drawString(0, 10, "Clients: " + String(gClients));
-  	display.drawString(60, 10, "Status: " + (gPanelStat.length()==0? "Clear" : gPanelStat));
-  	display.drawString(0, 20, RKPClass::dispBufferLast);
+  	
+ 	display.setFont(display.ArialMT_Plain_10);
+	
+	// The coordinates define the "left top" starting point of the text
+	display.setTextAlignment(TEXT_ALIGN_LEFT);
+	display.drawString(0,  0, "Wifi: " + gWifiStat);
+	display.drawString(0, 10, "Clients: " + String(gClients));
+  	display.drawString(0, 20, "Status: " + (gPanelStat.length()==0? "OK" : gPanelStat));
+	display.drawString(0, 30, "Disp:" + String(RKPClass::dispBuffer));
+
+	/*
+	// The coordinates define the center of the text
+	display.setTextAlignment(TEXT_ALIGN_CENTER);
+	display.drawString(64, 22, "!Center aligned (64,22)");
+
+	// The coordinates define the right end of the text
+	display.setTextAlignment(TEXT_ALIGN_RIGHT);
+	display.drawString(128, 33, "!Right aligned (128,33)");
+	*/
+
   	display.display();
   }
 
 #else
 
-  //this code for esp32s that dont have the built in lcd screen
+  //stubb out functions when no LCD required
   void LCD_Init()
   {
   	LogLn("LCDInit Disabled");
@@ -167,6 +179,6 @@ void FlagWebsocketUpdate()
 //Store for what will be displayed next display update.
 int gClients = 0;
 String gWifiStat = "Off";
-String gPanelStat = "";
+String gPanelStat = ""; //reserved for showing internatl stats
 bool bDisplayToSend = false;
 bool bWebSocketToSend = false;

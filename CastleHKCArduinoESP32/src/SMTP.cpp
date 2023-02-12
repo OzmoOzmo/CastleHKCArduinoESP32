@@ -15,8 +15,14 @@
 #include "Config.h"
 #include "WebSocket.h" //for the base64 stuff
 
+#ifdef ESP32
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#endif
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+#endif
+
 
 int SMTP::nEmailStage = 0;
 MSG SMTP::nMsgToSend = MSG_NA;

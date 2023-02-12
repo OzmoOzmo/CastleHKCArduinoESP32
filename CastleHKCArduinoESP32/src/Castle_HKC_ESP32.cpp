@@ -79,10 +79,10 @@ void setup()
     LogLn("Server Init..");
     WebSocket::ServerInit();
 
-    //LogLn("SMTP Init..");
-    //SMTP::QueueEmail(MSG_START); //Creates a bootup email
+    LogLn("SMTP Init..");
+    SMTP::QueueEmail(MSG_START); //Creates a bootup email
 
-    //SMTP::StartEmailMonitor();
+    SMTP::StartEmailMonitor();
 
     WebSocket::StartWebServerMonitor();
 

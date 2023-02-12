@@ -17,20 +17,17 @@
  * 
 */
 
-#define WEBSERVER
-#define WEBSOCKET
-
-
-#include "LOG.h"
-static const char *TAG = "WS";
-
+#include "Arduino.h"
 #include "WebSocket.h"
-#include "RKP.h"  //for PushKey
+#include "LOG.h"
 
 int WebSocket::nConnectState = WIFI_DOWN; //0 = no wifi  1= wificonnecting 2=wifi+sockets ok
 String WebSocket::sIPAddr = ""; //for reporting and Alexa
 
+
 #ifdef WEBSERVER
+static const char* TAG = "WS";
+#include "RKP.h"  //for PushKey
 #include <esp_http_server.h>
 #include <lwip/sockets.h>
 #include <WiFi.h>
@@ -54,23 +51,49 @@ const String htmlSite =
 "<!DOCTYPE html>"
 "<html><head><title>Castle ESP32 HKC</title>"
 "<meta name='viewport' content='width=320, initial-scale=1.8, user-scalable=no'>" //"no" as screen unzooms when press button
-"<style>.long{height:64px;} button{height: 35px;width: 35px;}</style>"
+    "<style>\n"
+        ".long {height: 64px;}\n"
+        "button {height: 35px;width: 35px;}\n"
+        ".led {height: 10px;width: 10px;margin-top:3px;margin-bottom:3px;margin-left:1px;border-radius: 10px;border:1px solid;}\n"
+        ".ledx {background-color: #FFFFFF !important;}\n"
+        ".ledg {background-color: #77FF77;border-color: #55CC55;}\n"
+        ".ledy {background-color: #FFDD77;border-color: #CCBB55;}\n"
+        ".ledr {background-color: #EE2222;border-color: #CC0000;}\n"
+    "</style>"
 "</head><body>"
-"<div style='border: 5px solid black; width: 180px;'>&nbsp;<div id=msg1 style='float:left'>%</div><div id=msg2 style='float:right'>%</div></div>"
-"<table id='table'>"
-"<tr><td><button>1</button></td><td><button>2</button></td><td><button>3</button></td><td rowspan=2><button class=long>Q</button></td></tr>"
-"<tr><td><button>4</button></td><td><button>5</button></td><td><button>6</button></td></tr>"
-"<tr><td><button>7</button></td><td><button>8</button></td><td><button>9</button></td><td><button>Y</button></td></tr>"
-"<tr><td><button value='*'>" KEY_STAR "</button></td><td><button>0</button></td><td><button value='#'>" KEY_POUND "</button></td><td><button>N</button></td></tr>"
+"<table id=table border=0>\n"
+	"<tr>"
+		/*"<td><span id='ledg' class='led ledg'>&nbsp;</span><span id='ledy' class='led ledy ledx'>&nbsp;</span><span id='ledr' class='led ledr'>&nbsp;</span></td>"
+		"<td colspan='3'><div style='border: 5px solid black;width: 130px;display: flex'>&nbsp;<div id='msg1'>Not Connected</div>&nbsp;</div></td>"
+		*/
+		"<td colspan='4' >"
+		"<div style='border: 4px solid black;width: 180px;display: flex;'>"
+		"<div id='ledg' class='led ledg ledx float:right'>&nbsp;</div>"
+		"<div id='ledy' class='led ledy ledx'>&nbsp;</div>"
+		"<div id='ledr' class='led ledr ledx'>&nbsp;</div>"
+		"&nbsp;<div id='msg1'>Not Connected</div>&nbsp;"
+		"</div></td>"
+	"</tr>"
+	"<tr><td><button>1</button></td><td><button>2</button></td><td><button>3</button></td><td rowspan='2'><button class='long'>Q</button></td></tr>\n"
+	"<tr><td><button>4</button></td><td><button>5</button></td><td><button>6</button></td></tr>\n"
+	"<tr><td><button>7</button></td><td><button>8</button></td><td><button>9</button></td><td><button>Y</button></td></tr>\n"
+	"<tr><td><button value='*'>" KEY_STAR "</button></td><td><button>0</button></td><td><button value='#'>" KEY_POUND "</button></td><td><button>N</button></td></tr>"
+	"</tr>"
 "</table>"
 "<script defer>var ws;"
 "function ge(x){return document.getElementById(x);}\n"
-"function st(x,y){ge('msg1').innerText=x;ge('msg2').innerText=y?y:' ';}\n"
+"function st(x,g,y,r){"
+  "ge('msg1').innerText=x;"
+  "ge('ledg').className='led ledg'+(g=='1'?'':' ledx');"
+  "ge('ledy').className='led ledy'+(y=='1'?'':' ledx');"
+  "ge('ledr').className='led ledr'+(r=='1'?'':' ledx');"
+"}\n"
 "try{"
 "ws = new WebSocket('" WS "://'+location.hostname+'/ws');"
-"ws.onmessage = function(evt){var d=evt.data.split('|');st(d[0],d[1]);}\n"
-"ws.onerror = function(evt){st('ERR:' + evt.data,'');}\n"
-"ws.onclose = function(evt){st('Connection Closed','');}\n"
+"ws.onmessage = function(evt){\n"
+"var d=evt.data;st(d.substring(3),d[0],d[1],d[2]);}\n"
+"ws.onerror = function(evt){st('ERR:' + evt.data,'','','');}\n"
+"ws.onclose = function(evt){st('Connection Closed','','','');}\n"
 //pc keyboard support
 "document.body.onkeydown = function(e){ws.send(String.fromCharCode(e.keyCode));}\n"
 //buttons on html
@@ -78,35 +101,18 @@ const String htmlSite =
 "} catch(ex) {alert(ex.message);}\n"
 "</script></body></html>";
 
+/*move leds outside of window
+<td><span id="ledg" class="led ledg">  </span><span id="ledy" style="" class="led ledy ledx">&nbsp;</span><span id="ledr" class="led ledr">&nbsp;</span></td>
+<td colspan="3"><div style="border: 5px solid black;width: 130px;display: flex;">&nbsp;<div id="msg1">  System Armed  </div>&nbsp;</div></td>
+*/
+
+
 /* Root HTTP GET handler */
 static esp_err_t root_get_handler(httpd_req_t *req)
 {
 	const char* pStr = htmlSite.c_str();
 	httpd_resp_sendstr(req, pStr);
     return ESP_OK;
-
-	//todo: for nicer initial display... we can replacing % with the current rkp display - need do memory efficiently
-	//int i1 = htmlSite.indexOf('%');
-	//int i2 = htmlSite.indexOf('%', i1 + 1);
-	/*httpd_resp_send(req, (char*)pStr, i1); //first part
-	httpd_resp_send(req, (char*)RKPClass::dispBufferLast,16); //first 15 characters - everything up to |
-	httpd_resp_send(req, (char*)(pStr+i1+1), i2-i1-1); //second part
-	httpd_resp_send(req, (char*)(RKPClass::dispBufferLast+17), DISP_BUF_LEN-17); //alarm etc
-	httpd_resp_send(req, (char*)(pStr + i2 + 1), htmlSite.length()- (i2 + 1) ); //third part to end
-	*/
-	//int maxLen = htmlSite.length()+ DISP_BUF_LEN; //a tad more than needed when you remove the %s's from htmlSite
-	//char str[maxLen];
-	//memcpy(str, (char*)pStr, i1); //first part
-	//memcpy(str+i1, (char*)RKPClass::dispBufferLast, 16); //first 15 characters - everything up to |
-	//memcpy(req, (char*)(pStr+i1+1), i2-i1-1); //second part
-	//httpd_resp_send(req, (char*)(RKPClass::dispBufferLast+17), DISP_BUF_LEN-17); //alarm etc
-	//httpd_resp_send(req, (char*)(pStr + i2 + 1), htmlSite.length()- (i2 + 1) ); //third part to end
-	//sprintf(char *str, const char *format, ...)
-	//httpd_resp_sendstr(req, pStr);
-
-	//httpd_resp_set_hdr( req, "Connection", "close"); //get chrome to close unneeded sockets
-    //const char* resp_str = (const char*) req->user_ctx;
-    //httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 }
 
 
@@ -308,33 +314,32 @@ void WebSocket::ServerInit()
     return;
 
 }
-#endif
+
 //Send something to connected browser
 bool WebSocket::WebSocket_send()
 {
-	LogLn("Send");
+	//LogLn("Send");
+	gClients = 0;
 	for (int i=0; i<CONFIG_LWIP_MAX_SOCKETS; ++i)
 	{
 		struct sockaddr addr; //?struct sockaddr_in6 addr;
 		socklen_t addr_size = sizeof(addr);
 		int sock = LWIP_SOCKET_OFFSET + i;
 		int res = getpeername(sock, &addr, &addr_size);
-		//if (res == 0) {
-		//	//ESP_LOGI(TAG, "sock: %d -- addr: %x, port: %d", sock, addr.sin6_addr.un.u32_addr[3], addr.sin6_port);        
-		//	//ESP_LOGI(TAG, "Addr: %s Family: %d", addr.sa_data, (int)addr.sa_family_t);
-		//	ESP_LOGI(TAG, "sock: %d Family: %d", sock, (int)(addr.sa_family));
-		//}
-
-		#define DoAsyncSync //async only supported right now
-		#ifdef DoAsyncSync
-		{//this calls - static esp_err_t trigger_async_send(..) which calls httpd_ws_send_frame_async
+		if (res == 0) {
+			//	//ESP_LOGI(TAG, "sock: %d -- addr: %x, port: %d", sock, addr.sin6_addr.un.u32_addr[3], addr.sin6_port);        
+			//	//ESP_LOGI(TAG, "Addr: %s Family: %d", addr.sa_data, (int)addr.sa_family_t);
+			//	ESP_LOGI(TAG, "sock: %d Family: %d", sock, (int)(addr.sa_family));
+		
+			//this calls - static esp_err_t trigger_async_send(..) which calls httpd_ws_send_frame_async
 			struct async_resp_arg* resp_arg = (async_resp_arg*)(void*)malloc(sizeof(struct async_resp_arg));
 			resp_arg->hd = WebSocket::server;
 			resp_arg->fd = sock; //this is req->aux->sd->fd
 			esp_err_t ret = httpd_queue_work(WebSocket::server, ws_async_send, resp_arg);
+			gClients++;
 		}
-		#else
-		{//todo: code to send it right now.. possibly faster response?
+		
+		/*{//todo: code to send it right now.. possibly faster response?
 		    httpd_ws_frame_t ws_pkt;
 			uint8_t *buf = NULL;
 			memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -348,9 +353,9 @@ bool WebSocket::WebSocket_send()
 				ESP_LOGE(TAG, "httpd_ws_send_frame failed");
 				closesocket(sock);
 			}
-		}
-		#endif
+		}*/
 	}
+	FlagDisplayUpdate(); //update number of connected websockets
 	return true;
 }
 
@@ -372,152 +377,174 @@ void WebSocket::EtherPoll()
 #endif
 }
 
+#else //No WebServer...
 
-void WebSocket::StartWebServerMonitor()
-{
-	xTaskCreatePinnedToCore(
-		[](void* parameter) {
-			while (true)
-			{
-				WebSocket::Verify_WiFi();
-				delay(500);
-				#ifdef REPORT_STACK_SPACE
-				Logf("threadWIFI %d\n", uxTaskGetStackHighWaterMark(NULL));
-				#endif
-			}
-		},
-		"threadWIFI",     // Task name
-		5000,             // Stack size (bytes)
-		NULL,             // Parameter
-		1,                // Task priority
-		NULL,             // Task handle
-		1                 // ESP Core
-	);
+void WebSocket::EtherPoll(){}
 
-	xTaskCreatePinnedToCore(
-		[](void* parameter)
-		{
-			while (true)
-			{
-				WebSocket::EtherPoll();
-				delay(75);
-
-				#ifdef REPORT_STACK_SPACE
-				static int n = 0;
-				if (n++ % 10 == 0)
-					Logf("threadHTTPS %d\n", uxTaskGetStackHighWaterMark(NULL));
-				#endif
-			}
-		},
-		"threadHTTPS",  // Task name
-		10000,            // Stack size (bytes)
-		NULL,             // Parameter
-		1,                // Task priority
-		NULL,             // Task handle
-		1                 // ESP Core
-	);
-
-	//Do all LCD updates in Wifi/WebServer/UI Thread
-	xTaskCreatePinnedToCore(
-		[](void* parameter)
-		{
-			while (true)
-			{
-				if (bDisplayToSend)
-				{
-					bDisplayToSend = false;
-					DisplayUpdateDo();
-				}
-
-				if (bWebSocketToSend)
-				{
-					bWebSocketToSend = false;
-					WebSocket::WebSocket_send();
-				}
-
-				delay(10);
-
-				#ifdef REPORT_STACK_SPACE
-				static int n=0;
-				if (n++ % 10 == 0)
-					Logf("threadLCD %d\n", uxTaskGetStackHighWaterMark(NULL));
-				#endif
-			}
-		},
-		"threadLCD",  // Task name
-			3000,     // Stack size (bytes)
-			NULL,     // Parameter
-			1,        // Task priority
-			NULL,     // Task handle
-			1         // ESP Core
-		);
+bool WebSocket::WebSocket_send(){
+	return true;
 }
 
+void WebSocket::ServerInit(){}
 
-// Start process to join a Wifi connection
-void WebSocket::WebSocket_WiFi_Init()
-{
-	gWifiStat = "Wifi Init..." WIFI_SSID; FlagDisplayUpdate();
+#endif
 
-	//Wifi Password is defined in config.h
-	IPAddress ip_me; ip_me.fromString(IP_ME);
-	IPAddress ip_gw; ip_gw.fromString(IP_GW);
-	IPAddress ip_sn; ip_sn.fromString(IP_SN);
-	IPAddress ip_dns; ip_dns.fromString(IP_DNS);
-	
-	WiFi.config(ip_me, ip_gw, ip_sn, ip_dns, ip_dns);
-	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-	nConnectState = WIFI_PENDING;
-	LogLn("End EtherInit");
-}
 
-//here every 500ms or so - check if connected
-void WebSocket::Verify_WiFi()
-{
-	static int nErrorCount = 0;
-	if (nConnectState == WIFI_DOWN)
+#ifdef WIFI
+	void WebSocket::StartWebServerMonitor()
 	{
-		LogLn("Wifi Down - Start Wifi");
-		gWifiStat = "Cnt: " WIFI_SSID; FlagDisplayUpdate(); //ToScreen(0, "Connecting: " WIFI_SSID);
-		WebSocket::WebSocket_WiFi_Init();
-		nConnectState = WIFI_PENDING;
-		nErrorCount = 0;
-		return;
+		xTaskCreatePinnedToCore(
+			[](void* parameter) {
+				while (true)
+				{
+					WebSocket::Verify_WiFi();
+					delay(500);
+					#ifdef REPORT_STACK_SPACE
+					Logf("threadWIFI %d\n", uxTaskGetStackHighWaterMark(NULL));
+					#endif
+				}
+			},
+			"threadWIFI",     // Task name
+			5000,             // Stack size (bytes)
+			NULL,             // Parameter
+			1,                // Task priority
+			NULL,             // Task handle
+			1                 // ESP Core
+		);
+
+		xTaskCreatePinnedToCore(
+			[](void* parameter)
+			{
+				while (true)
+				{
+					WebSocket::EtherPoll();
+					delay(75);
+
+					#ifdef REPORT_STACK_SPACE
+					static int n = 0;
+					if (n++ % 10 == 0)
+						Logf("threadHTTPS %d\n", uxTaskGetStackHighWaterMark(NULL));
+					#endif
+				}
+			},
+			"threadHTTPS",  // Task name
+			10000,            // Stack size (bytes)
+			NULL,             // Parameter
+			1,                // Task priority
+			NULL,             // Task handle
+			1                 // ESP Core
+		);
+
+		//Do all LCD updates in Wifi/WebServer/UI Thread
+		xTaskCreatePinnedToCore(
+			[](void* parameter)
+			{
+				while (true)
+				{
+					if (bDisplayToSend)
+					{
+						bDisplayToSend = false;
+						DisplayUpdateDo();
+					}
+
+					if (bWebSocketToSend)
+					{
+						bWebSocketToSend = false;
+						WebSocket::WebSocket_send();
+					}
+
+					delay(10);
+
+					#ifdef REPORT_STACK_SPACE
+					static int n=0;
+					if (n++ % 10 == 0)
+						Logf("threadLCD %d\n", uxTaskGetStackHighWaterMark(NULL));
+					#endif
+				}
+			},
+			"threadLCD",  // Task name
+				3000,     // Stack size (bytes)
+				NULL,     // Parameter
+				1,        // Task priority
+				NULL,     // Task handle
+				1         // ESP Core
+			);
 	}
 
-	if (nConnectState == WIFI_PENDING)
-		if (WiFi.status() != WL_CONNECTED)
+
+	// Start process to join a Wifi connection
+	void WebSocket::WebSocket_WiFi_Init()
+	{
+		gWifiStat = "Wifi Init..." WIFI_SSID; FlagDisplayUpdate();
+
+		//Wifi Password is defined in config.h
+		IPAddress ip_me; ip_me.fromString(IP_ME);
+		IPAddress ip_gw; ip_gw.fromString(IP_GW);
+		IPAddress ip_sn; ip_sn.fromString(IP_SN);
+		IPAddress ip_dns; ip_dns.fromString(IP_DNS);
+		
+		WiFi.config(ip_me, ip_gw, ip_sn, ip_dns, ip_dns);
+		WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+		nConnectState = WIFI_PENDING;
+		LogLn("End EtherInit");
+	}
+
+	//here every 500ms or so - check if connected
+	void WebSocket::Verify_WiFi()
+	{
+		static int nErrorCount = 0;
+		if (nConnectState == WIFI_DOWN)
 		{
-			if (nErrorCount++ < 10){
-				Log(F("Connecting.."));
+			LogLn("Wifi Down - Start Wifi");
+			gWifiStat = "Cnt: " WIFI_SSID; FlagDisplayUpdate(); //ToScreen(0, "Connecting: " WIFI_SSID);
+			WebSocket::WebSocket_WiFi_Init();
+			nConnectState = WIFI_PENDING;
+			nErrorCount = 0;
+			return;
+		}
+
+		if (nConnectState == WIFI_PENDING)
+			if (WiFi.status() != WL_CONNECTED)
+			{
+				if (nErrorCount++ < 10){
+					Log(F("Connecting.."));
+				}
+				else
+					nConnectState = WIFI_DOWN;
+				return;
 			}
 			else
-				nConnectState = WIFI_DOWN;
+			{//just got good wifi - set up socket server & web server
+				nConnectState = WIFI_OK;
+				LogLn("WiFi connected.");
+				
+				//display on LCD
+				WebSocket::sIPAddr = WiFi.localIP().toString();
+				gWifiStat = "IP:" + WebSocket::sIPAddr + ":" + IP_P; FlagDisplayUpdate();
+
+			#ifdef ALEXA
+				AlexaStart(secureServer);
+			#endif
+				return;
+			}
+
+		if (WiFi.status() != WL_CONNECTED)
+		{//failed to connect - try again
+			LogLn(F("Retry connect Wifi"));
+			nConnectState = WIFI_DOWN;
 			return;
 		}
-		else
-		{//just got good wifi - set up socket server & web server
-			nConnectState = WIFI_OK;
-			LogLn("WiFi connected.");
-			
-		#ifdef WEBSERVER
-			//display on LCD
-			WebSocket::sIPAddr = WiFi.localIP().toString();
-			gWifiStat = "IP:" + WebSocket::sIPAddr + ":" + IP_P; FlagDisplayUpdate();
-		#else
-			gWifiStat = "Webserver OFF"; FlagDisplayUpdate();
-		#endif
-
-		#ifdef ALEXA
-			AlexaStart(secureServer);
-		#endif
-			return;
-		}
-
-	if (WiFi.status() != WL_CONNECTED)
-	{//failed to connect - try again
-		LogLn(F("Retry connect Wifi"));
-		nConnectState = WIFI_DOWN;
+	}
+#else
+	void WebSocket::StartWebServerMonitor()
+	{
+		gWifiStat = "Wifi OFF"; 
+		FlagDisplayUpdate();
 		return;
 	}
-}
+
+	void WebSocket::Verify_WiFi(){}
+
+	void WebSocket::WebSocket_WiFi_Init(){}
+#endif //no WIFI
+
