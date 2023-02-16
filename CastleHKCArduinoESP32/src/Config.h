@@ -22,15 +22,17 @@
 #define WIFI_SSID "{WIFI NAME HERE}"
 #define WIFI_PASSWORD "{WIFI PASS HERE}"
 
-//Email Password (optional) [wont work with gmail smtp servers]
-#define SMTP_SERVER "smtp.gmx.com"        
-#define SMTP_PORT 465                   //always 465 for Secure Gmail
-#define EMAIL_SUBJECT "House Alarm"
-#define SMTP_USER "YOUREMAIL@gmx.com" //get email address at www.gmx.com or other service with accessible smtp server
-#define SMTP_PASS "PASSWORD"
-#define EMAIL_ADDR "example@example.com"  //Email to send to
 
-#ifdef ESP32
+//Email Passwords - Works with gmail
+//Emails are optional - comment out line "#define SENDEMAILS" to not send emails
+//Important: you must create a password according to this guide: https://support.google.com/accounts/answer/185833
+#define SMTP_SERVER "smtp.gmail.com"        
+#define SMTP_USER "YourSendEmailAddress@gmail.com"
+#define SMTP_PASS "GoogleGeneratedPasscode" //see comment above
+#define EMAIL_ADDR "example@example.com"  //Email to send to
+#define SMTP_PORT 465 //465 works ok for GMAIL
+#define EMAIL_SUBJECT "House Alarm"
+
 //LED_BUILTIN Builtin Red led is Pin 2 on D1 R32 (17 on some esp32)
 // #define LED_Stat 17 // this binks when packets are sent to panel
 // #define ledFeedback 25 // Blink a Led we can use to show ESP is running
@@ -38,19 +40,19 @@
 // //#Serial Port pins - We leave Serial0 for programming and debug - this serial port connects to the HKC Panel via the circuit
 // //These are the Pins to use for Serial Connection
 // #define SERIAL1_RXPIN 16
-// #define SERIAL1_TXPIN 27 //todo: one wire 27
+// #define SERIAL1_TXPIN 27
 
 #define ledFeedback 14 // Blink a Led we can use to show ESP is running
 #define LED_Stat 12 // this binks when packets are sent to panel
 #define SERIAL1_RXPIN 13
-#define SERIAL1_TXPIN 15 //todo: one wire 27
-#define SERIAL1_TXACTIVE -1 //Pin is lit when sending
+#define SERIAL1_TXPIN 15
+#define SERIAL1_TXACTIVE -1 //Pin is flashed when sending (not used)
 //LCD Display Pins
 //SDA=18, SCL=19 for my custom boards
 //SDA=5,  SCL=4 for ESP board with built in screen (https://www.aliexpress.com/item/33047481007.html)
 #define SCREEN_SDA 5
 #define SCREEN_SCL 4
-#endif
+
 
 //The Arduino IP address and Port (192.168.1.177)
 #define IP_ME "192.168.0.177"

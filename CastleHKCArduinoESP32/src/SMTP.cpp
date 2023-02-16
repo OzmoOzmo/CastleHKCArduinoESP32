@@ -15,18 +15,11 @@
 #include "Config.h"
 #include "WebSocket.h" //for the base64 stuff
 
-#ifdef ESP32
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#endif
-#ifdef ESP8266
-#include <ESP8266WiFi.h>
-#endif
-
 
 int SMTP::nEmailStage = 0;
 MSG SMTP::nMsgToSend = MSG_NA;
-
 
 #ifndef SENDEMAILS
 
@@ -132,6 +125,7 @@ bool SendEmailWorkflow()
     WiFiClientSecure client;
     LogLn("Connecting to : " SMTP_SERVER);
 
+    client.setInsecure();
     if (!client.connect(SMTP_SERVER, SMTP_PORT)) {
         LogLn("Could not connect to mail server");
         return false;
@@ -237,7 +231,7 @@ void SendEmailThread(void* parameter)
         {
             nErrorCount ++;
             delay(10000); //there was an error - wait 10 seconds and retry
-            if (nErrorCount > 3)
+            if (nErrorCount > 10)
             {
                 LogLn("Restart Wifi");
                 if (WebSocket::nConnectState != WIFI_PENDING)
@@ -254,7 +248,7 @@ void SMTP::StartEmailMonitor()
         "thread2",  // Task name
         50000,             // Stack size (bytes)
         NULL,             // Parameter
-        1,                // Task priority
+        tskIDLE_PRIORITY, // Task priority (set low as emails take time to send)
         NULL,             // Task handle
         1                 //ARDUINO_RUNNING_CORE
     );
