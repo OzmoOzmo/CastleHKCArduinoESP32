@@ -245,8 +245,8 @@ void SMTP::StartEmailMonitor()
 {
     xTaskCreatePinnedToCore(
         SendEmailThread,
-        "thread2",  // Task name
-        50000,             // Stack size (bytes)
+        "thread2",        // Task name
+        50000,            // Stack size (bytes)
         NULL,             // Parameter
         tskIDLE_PRIORITY, // Task priority (set low as emails take time to send)
         NULL,             // Task handle

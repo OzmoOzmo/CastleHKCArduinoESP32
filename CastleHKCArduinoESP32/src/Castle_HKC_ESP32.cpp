@@ -28,11 +28,14 @@
 *  ****See Config.h for all the configuration you may need*****
 */
 
-
+#include "config.h"
 #include "Log.h"
 #include "RKP.h"
 #include "SMTP.h"
 #include "WebSocket.h"
+#ifdef ENABLE_TELEGRAM
+    #include "Telegram.h"
+#endif
 
 void ShowVersion(){
     #ifdef ESP32
@@ -81,8 +84,13 @@ void setup()
 
     LogLn("SMTP Init..");
     SMTP::QueueEmail(MSG_START); //Creates a bootup email
-
+    
     SMTP::StartEmailMonitor();
+
+    #ifdef ENABLE_TELEGRAM
+    Telegram::StartMonitor();
+    Telegram::QueueTelegram("Alarm Startup"); //Creates a bootup email
+    #endif
 
     WebSocket::StartWebServerMonitor();
 
@@ -90,6 +98,7 @@ void setup()
     LogLn("If LED not Blinking - Ensure Panel is Connected.");
     pinMode(ledFeedback, OUTPUT);
     pinMode(LED_Stat, OUTPUT);
+    pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop()
@@ -108,6 +117,7 @@ void loop()
         if (tiLast < tiNow - 500){
             tiLast = tiNow;
             digitalWrite(ledFeedback, !digitalRead(ledFeedback));
+            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
         }
     }
 }

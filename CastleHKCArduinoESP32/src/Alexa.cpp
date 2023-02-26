@@ -6,18 +6,17 @@
 
 #ifdef ALEXA
 
+#include <esp_http_server.h> //for responding to alexas requests
 #include "Alexa.h"
 
 // Includes for the server
 #include <WiFiUdp.h>
-#include <HTTPServer.hpp>
-#include <HTTPRequest.hpp>
-#include <HTTPResponse.hpp>
 
 #include "Log.h"
 #include "WebSocket.h" //for the IPaddress
 #include "RKP.h" //for keypress
 
+static const char* TAG = "ALEXA";
 bool devValues[]{ false,false};
 String devNames[]{ "Home Security", "Home Partset"};
 uint8_t currentDeviceCount = sizeof(devValues)/sizeof(devValues[0]);
@@ -53,13 +52,13 @@ String deviceJsonString(uint8_t deviceId)
 	return buf;
 }
 
-void serveDescription(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res)
+esp_err_t alexaServeDescription(httpd_req_t *req)
 {
 	// Status code is 200 OK by default.
-	res->setHeader("Content-Type", "text/xml");
+	httpd_resp_set_hdr(req, "Content-Type", "text/xml");
 	String sIP = WebSocket::sIPAddr;
 
-	String buf = "<?xml version=\"1.0\" ?>"
+	String xml = "<?xml version=\"1.0\" ?>"
 		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
 		"<specVersion><major>1</major><minor>0</minor></specVersion>"
 		"<URLBase>http://" + sIP + ":80/</URLBase>"
@@ -78,7 +77,9 @@ void serveDescription(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* 
 		"</device>"
 		"</root>";
 
-	res->println(buf);
+	const char* pStr = xml.c_str();
+	httpd_resp_sendstr(req, pStr);
+    return ESP_OK;
 }
 
 void respondToSearch()
@@ -101,51 +102,76 @@ void respondToSearch()
 	LogLn("UDPResp: " + buf);
 }
 
-void handleAlexaApiCall(httpsserver::HTTPRequest* _req, httpsserver::HTTPResponse* res)
+esp_err_t alexaHandleApiCall(httpd_req_t *res) 
 {
 	LogLn("AlexaApiCall");
-	String sResponse = "";
 
-	std::string std_req = _req->getRequestString();
-	String req(std_req.c_str());
+	//std::string std_req = res->getRequestString(); //httpd_req_get_url_query_len
+	String sReq;
+	int buf_len = httpd_req_get_url_query_len(res) + 1;
+    if (buf_len > 1)
+	{
+		char buf[buf_len+1];
+        if (httpd_req_get_url_query_str(res, buf, buf_len) == ESP_OK)
+        {
+            ESP_LOGI(TAG, "Found URL query => %s", buf);
+            char param[32];
+            /* Get value of expected key from query string */
+            if (httpd_query_key_value(buf, "state", param, sizeof(param)) == ESP_OK)
+            {
+                ESP_LOGI(TAG, "Found URL query parameter => query1=%s", param);
+            }
+        }
+		sReq=String((char*)buf);
+    }
+	//]String req(std_req.c_str());
 
 	//get the content - and transfer buffer to a String
-	size_t nBodyLen = _req->getContentLength();
-	char cbody[nBodyLen + 1];
-	_req->readChars(cbody, nBodyLen);
-	cbody[nBodyLen] = 0;
-	String body(cbody);
-	
+	String body;
+	{
+		size_t nBodyLen = res->content_len; //]-getContentLength();
+		char cbody[nBodyLen + 1];
+		// Read the body data request
+		int ret = httpd_req_recv(res, cbody, nBodyLen);
+		//] Log data received
+		//]ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
+		//]ESP_LOGI(TAG, "%.*s", ret, buf);
+		//]ESP_LOGI(TAG, "====================================");
+		//]res->readChars(cbody, nBodyLen);
+		cbody[nBodyLen] = 0;
+		body = String(cbody);
+	}
+	LogLn("=HTTP REQUEST=");
+	LogLn("Req: " + sReq);
+	LogLn("Bdy: " + body);
 
 	if (body.indexOf("devicetype") > 0)
 	{//client wants a hue api username - any name will do.
 		LogLn("devicetype");
 		body = "";
-		sResponse = "[{\"success\":{\"username\":\"admin\"}}]";
+		const char szResponse[] = "[{\"success\":{\"username\":\"admin\"}}]";
+		httpd_resp_set_hdr(res, "Content-Type", "application/json");
+		httpd_resp_sendstr(res, szResponse); //]res->println(sResponse);
+		Logf("Rsp1: %s\n", szResponse);
+		LogLn("==============");
+		return ESP_OK;
 	}
-	else if ((req.indexOf("state") > 0) && (body.length() > 0))
+	else if ((sReq.indexOf("state") > 0) && (body.length() > 0))
 	{//client wants to control light
 		//respond quickly...
-		sResponse = "[{\"success\":{\"/lights/1/state/\": true}}]";
-		res->setHeader("Content-Type", "application/json");
-		res->println(sResponse);
-		res->finalize();
-
-		LogLn("=HTTP REQUEST=");
-		LogLn("Req: " + req);
-		LogLn("Bdy: " + body);
-		LogLn("Rsp: " + sResponse);
+		static char szResponse[] = "[{\"success\":{\"/lights/1/state/\": true}}]";
+		httpd_resp_set_hdr(res, "Content-Type", "application/json");
+		httpd_resp_sendstr(res, szResponse); //]res->println(sResponse);
+		Logf("Rsp: %s\n", szResponse);
 		LogLn("==============");
 
-		uint32_t devId = req.substring(req.indexOf("lights") + 7).toInt();
+		uint32_t devId = sReq.substring(sReq.indexOf("lights") + 7).toInt();
 		Logf("Light State: %d\n", devId);
 		devId--; //zero-based for devices array
 		if (devId > currentDeviceCount) {
 			LogLn("*Error Incorrect Device %d*\n");
-			return;
+			return ESP_OK;
 		}
-
-		//]devices[devId]->setPropertyChanged(EspalexaDeviceProperty::none);
 
 		if (body.indexOf("false") > 0) //OFF command
 		{
@@ -162,9 +188,8 @@ void handleAlexaApiCall(httpsserver::HTTPRequest* _req, httpsserver::HTTPRespons
 			RKPClass::PushKey('1');
 			RKPClass::PushKey('1');
 			RKPClass::PushKey('1');
-
 		}
-		return;
+		return ESP_OK;
 	}
 	else
 	{
@@ -172,11 +197,12 @@ void handleAlexaApiCall(httpsserver::HTTPRequest* _req, httpsserver::HTTPRespons
 		//Request: GET /api/2WLEDHardQrI3WHYTHoMcXHgEspsM8ZZRpSKtBQr/lights 
 		//Request: GET /api/admin/lights/1 
 		//int pos = req.indexOf("lights");
+		String sResponse="";
 		int pNumber = 18;
-		int pos = req.indexOf("/api/admin/lights");
+		int pos = sReq.indexOf("/api/admin/lights");
 		if (pos >= 0) //client wants light info
 		{
-			int devId = req.substring(pos + pNumber).toInt();
+			int devId = sReq.substring(pos + pNumber).toInt();
 			if (devId == 0) //client wants all lights
 			{
 				LogLn("Light: All!");
@@ -199,26 +225,27 @@ void handleAlexaApiCall(httpsserver::HTTPRequest* _req, httpsserver::HTTPRespons
 				}
 				else
 				{
-					res->setHeader("Content-Type", "application/json");
+					//httpd_resp_set_hdr(res, "Content-Type", "application/json");
 					sResponse += deviceJsonString(devId);
 				}
 			}
 		}
-	}
-	//we don't care about other api commands at this time and send empty JSON
-	res->setHeader("Content-Type", "application/json");
-	res->println(sResponse);
-	res->finalize();
 
-	Serial.println("===");
-	Serial.println("Req: " + req);
-	Serial.println("Bdy: " + body);
-	Serial.println("Rsp: " + sResponse);
-	Serial.println("===");
-	return;
+		const char* pStr = sResponse.c_str();
+		httpd_resp_set_hdr(res, "Content-Type", "application/json");
+		httpd_resp_sendstr(res, pStr);
+		//]res->finalize();
+
+		//]Serial.println("===");
+		//]Serial.println("Req: " + req);
+		//]Serial.println("Bdy: " + body);
+		Serial.println("Rsp: " + sResponse);
+		Serial.println("===");
+		return ESP_OK;
+	}
 }
 
-void AlexaStart(httpsserver::HTTPServer* secureServer)
+void AlexaStart(httpd_handle_t secureServer)
 {
 	LogLn("Start Alexa");
 	udpConnected = espalexaUdp.beginMulticast(IPAddress(239, 255, 255, 250), 1900);

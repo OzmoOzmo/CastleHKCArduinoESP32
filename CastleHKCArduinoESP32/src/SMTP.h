@@ -4,9 +4,7 @@
 * Created: 4/5/2014 7:45:36 PM
 */
 
-
-#ifndef __SMTP_H__
-#define __SMTP_H__
+#pragma once
 
 #include "Config.h"
 #include "Arduino.h" //for boolean byte etc.
@@ -40,4 +38,3 @@ private:
 	SMTP();
 }; //SMTP
 
-#endif //__SMTP_H__

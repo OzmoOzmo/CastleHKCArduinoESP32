@@ -23,7 +23,7 @@
 
 int WebSocket::nConnectState = WIFI_DOWN; //0 = no wifi  1= wificonnecting 2=wifi+sockets ok
 String WebSocket::sIPAddr = ""; //for reporting and Alexa
-
+String WebSocket::escapedMac = "";
 
 #ifdef WEBSERVER
 static const char* TAG = "WS";
@@ -236,7 +236,7 @@ static const httpd_uri_t root = {
 	.uri       = "/",
 	.method    = HTTP_GET,
 	.handler   = root_get_handler,
-	.user_ctx  = (void *)"Hello World!" //http page to send
+	.user_ctx  = NULL
 };
 
 static const httpd_uri_t ws = {
@@ -254,6 +254,27 @@ static const httpd_uri_t icon = {
     .user_ctx  = NULL
 };
 
+#ifdef ALEXA
+static const httpd_uri_t alexadesc = {
+	.uri       = "/description.xml", //xml to send that describes our Alexa Support
+	.method    = HTTP_GET,
+	.handler   = alexaServeDescription, //this is in Alexa.cpp
+	.user_ctx  = (void *)"<xml>" 
+};
+
+static const httpd_uri_t alexaroot = {
+	.uri       = "/", //xml to send that describes our Alexa Support
+	.method    = HTTP_POST, //POST I think...
+	.handler   = alexaHandleApiCall, //this is in Alexa.cpp
+	.user_ctx  = (void *)"<xml>" 
+};
+static const httpd_uri_t alexarootGet = {
+	.uri       = "/", //xml to send that describes our Alexa Support
+	.method    = HTTP_GET, //POST I think...
+	.handler   = alexaHandleApiCall, //this is in Alexa.cpp
+	.user_ctx  = (void *)"<xml>" 
+};
+#endif
 
 esp_err_t fnSocketOpen(httpd_handle_t hd, int sockfd)
 {//here when socket opens - hd will be same as WebSocket::server
@@ -265,7 +286,7 @@ void fnSocketClose(httpd_handle_t hd, int sockfd)
     printf("Close Socket: hd = %p sockfd = %d\n", hd, sockfd);
 }
 
-//initialise what we can before wifi starts
+//initialise web server - wifi may not be up yet
 void WebSocket::ServerInit()
 {
 	LogLn("===");
@@ -299,11 +320,21 @@ void WebSocket::ServerInit()
         #endif
 
 		#ifdef ALEXA
-		void serveDescription(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
-		void handleAlexaApiCall(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
 
-		secureServer->registerNode(new httpsserver::ResourceNode("/description.xml", "GET", &serveDescription));
-		secureServer->setDefaultNode(new httpsserver::ResourceNode("", "", &handleAlexaApiCall));
+		WebSocket::escapedMac = WiFi.macAddress(); //eg. "30:AE:A4:27:84:14";
+		LogLn("mac raw: " + WebSocket::escapedMac); //30:AE:A4:27:84:14
+		WebSocket::escapedMac.replace(":", "");
+		WebSocket::escapedMac.toLowerCase();
+		//WebSocket::escapedMac[0] = DEVICEHUB_ID; //manual change to mac to make it unique again to alexa
+		LogLn ("Mac: " + WebSocket::escapedMac);
+
+		//]void serveDescription(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
+		//]void handleAlexaApiCall(httpsserver::HTTPRequest * _req, httpsserver::HTTPResponse * res);
+		//]httpd_register_uri_handler(server, new httpsserver::ResourceNode("/description.xml", "GET", &serveDescription));
+		//]secureServer->setDefaultNode(new httpsserver::ResourceNode("", "", &handleAlexaApiCall));
+		httpd_register_uri_handler(server, &alexaroot);
+		httpd_register_uri_handler(server, &alexarootGet);
+		httpd_register_uri_handler(server, &alexadesc);
 		#endif
 
     	ESP_LOGI(TAG, "WebSvr Started");
@@ -489,6 +520,22 @@ void WebSocket::ServerInit(){}
 		LogLn("End EtherInit");
 	}
 
+	void WebSocket::GetNtpTime()
+	{
+		LogLn("Retrieving time: ");
+  		configTime(0, 0, "pool.ntp.org"); // get UTC time via NTP
+		time_t now = time(nullptr);
+		while (now < 24 * 3600)
+		{
+			Logf(".");
+			delay(250);
+			now = time(nullptr);
+		}
+		struct tm timeinfo;
+  		getLocalTime(&timeinfo);
+		LogLn(&timeinfo, " Time: %A, %B %d %Y %H:%M:%S"); //LogLn(now);
+	}
+
 	//here every 500ms or so - check if connected
 	void WebSocket::Verify_WiFi()
 	{
@@ -522,8 +569,10 @@ void WebSocket::ServerInit(){}
 				WebSocket::sIPAddr = WiFi.localIP().toString();
 				gWifiStat = "IP:" + WebSocket::sIPAddr + ":" + IP_P; FlagDisplayUpdate();
 
+				//]GetNtpTime();
+
 			#ifdef ALEXA
-				AlexaStart(secureServer);
+				AlexaStart(server);
 			#endif
 				return;
 			}

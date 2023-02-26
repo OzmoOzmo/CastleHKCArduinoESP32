@@ -12,15 +12,16 @@
  *   See: http://www.boards.ie/vbulletin/showthread.php?p=88215184
  *
  */
-
+#include "Config.h"
 #include <Arduino.h>
 #include "RKP.h"
 #include "LOG.h"
 #include "Websocket.h"
 #include "SMTP.h"
-#include "Config.h"
-
 #include "SoftwareSerial.h"
+#ifdef ENABLE_TELEGRAM
+	#include "Telegram.h"
+#endif
 
 SoftwareSerial swSer;
 
@@ -432,6 +433,9 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 					{
 						LogLn(F("Alarm Cleared"));
 						RKPClass::mbIsPanelAlarm = false;
+						#ifdef ENABLE_TELEGRAM
+							Telegram::QueueTelegram("Alarm Condition Cleared OK");
+						#endif
 					}
 				}
 				else if (b == 0x30)
@@ -441,6 +445,9 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 						RKPClass::mbIsPanelAlarm = true;
 						LogLn(F("Alarm!!!!"));
 						SMTP::QueueEmail(MSG_ALARM);
+					    #ifdef ENABLE_TELEGRAM
+						    Telegram::QueueTelegram("Alarm Red Light!");
+    					#endif
 					}
 				}
 				b = (buf[2] & 0b1100);
@@ -450,6 +457,9 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 					{
 						LogLn(F("Warning Cleared"));
 						RKPClass::mbIsPanelWarning = false;
+						#ifdef ENABLE_TELEGRAM
+							Telegram::QueueTelegram("Warning Condition Cleared");
+						#endif
 					}
 				}
 				else if (b == 0b1100)
@@ -459,6 +469,9 @@ bool RKPClass::ReplyToPanel(byte *buf, int nBufLen)
 						RKPClass::mbIsPanelWarning = true;
 						LogLn(F("Warning!!!!"));
 						SMTP::QueueEmail(MSG_ALARM);
+						#ifdef ENABLE_TELEGRAM
+							Telegram::QueueTelegram("Alarm Yellow Light!");
+						#endif
 					}
 				}
 				//We could also listen to Green Led On/Off 0b0011

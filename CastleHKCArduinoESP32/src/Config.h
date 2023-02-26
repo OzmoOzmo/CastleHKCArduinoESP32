@@ -23,9 +23,9 @@
 #define WIFI_PASSWORD "{WIFI PASS HERE}"
 
 
-//Email Passwords - Works with gmail
-//Emails are optional - comment out line "#define SENDEMAILS" to not send emails
-//Important: you must create a password according to this guide: https://support.google.com/accounts/answer/185833
+//Email Passwords - Works well with gmail
+//(optional) comment out "#define SENDEMAILS" to not send emails
+//Important: you must create a password this way: https://support.google.com/accounts/answer/185833
 #define SMTP_SERVER "smtp.gmail.com"        
 #define SMTP_USER "YourSendEmailAddress@gmail.com"
 #define SMTP_PASS "GoogleGeneratedPasscode" //see comment above
@@ -42,17 +42,18 @@
 // #define SERIAL1_RXPIN 16
 // #define SERIAL1_TXPIN 27
 
-#define ledFeedback 14 // Blink a Led we can use to show ESP is running
-#define LED_Stat 12 // this binks when packets are sent to panel
-#define SERIAL1_RXPIN 13
-#define SERIAL1_TXPIN 15
+#define ledFeedback 25 // Blink a Led we can use to show ESP is running
+#define LED_Stat 17 // this binks when packets are sent to panel
+#define SERIAL1_RXPIN 16
+#define SERIAL1_TXPIN 27
 #define SERIAL1_TXACTIVE -1 //Pin is flashed when sending (not used)
 //LCD Display Pins
 //SDA=18, SCL=19 for my custom boards
 //SDA=5,  SCL=4 for ESP board with built in screen (https://www.aliexpress.com/item/33047481007.html)
-#define SCREEN_SDA 5
-#define SCREEN_SCL 4
-
+#define SCREEN_GND GND
+#define SCREEN_3V  18
+#define SCREEN_SCL 19
+#define SCREEN_SDA 23
 
 //The Arduino IP address and Port (192.168.1.177)
 #define IP_ME "192.168.0.177"
@@ -77,14 +78,14 @@
 //#define SENDEMAILS //Comment line out to disable sending emails (if email fails to send - wifi will reset!)
 #define DEBUG_LOG //Comment out to disable all debug comments
 #define ENABLE_DISPLAY //Comment out to disable using LCD
-//#define HTTPS //uncomment to use HTTPS (much slower and more limited browser support)
+//#define ENABLE_TELEGRAM //Comment out to disable using TELEGRAM
 //#define DUMP_RAW_LINE_DATA //This will dump all data from Arduino in hex to debug log (DEBUG_LOG required)
 //#define DEBUG_SHOW_ALL_TX //This will dump all data sent from ESP to Alarm to terminal
 //#define DEBUG_SHOW_ALL_RX //This will dump all data sent from Alarm to terminal
 
 //#define DEBUG_SHOW_DISPLAY ///Only show LCD Display on terminal
-//#define ALEXA //comment out to disable Alexa
-#define WIFI
+//#define ALEXA //comment out to disable Alexa support (alexa support is under construction)
+#define WIFI  //comment out for no wifi - not going to do a lot then
 #define WEBSERVER
 
 //Build Version (displayed on webpage)
@@ -99,4 +100,12 @@
 
 
 enum { WIFI_DOWN = 0, WIFI_PENDING = 1, WIFI_OK = 2 };
+
+
+//Telegram Config
+//Telegram BOT Token (Get from Botfather)
+#define BOT_TOKEN "XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+//Telegram User - this is your user ID - only this user can interact with this app
+#define CHAT_ID "XXXXXXXXXX"
+const unsigned long BOT_MTBS = 3000; // mean time between scan messages
 

@@ -103,16 +103,15 @@ void Log_Init()
   #include "RKP.h" //for the panel display buffer
   #include "config.h" //for pin assignments
   
-#define SCREEN_SDA 5 //SDA
-#define SCREEN_SCL 4 //SCL
+
 SSD1306Wire display(0x3c, SCREEN_SDA, SCREEN_SCL, GEOMETRY_128_64);
     
   void LCD_Init()
   {
 	//we can use Pin 18 as power to display - means can plug in a 4 pin oled display with no soldering... these 4 pins are all in a row together.
-	pinMode(18,OUTPUT); digitalWrite(18,HIGH);
+	pinMode(SCREEN_3V,OUTPUT); digitalWrite(SCREEN_3V,HIGH);
 	
-  	//display.flipScreenVertically(); //if required
+  	//display.flipScreenVertically(); //flip top bottom if required (Currently crashing)
 	display.init(); // Initialising the UI will init the display too.
     DisplayUpdateDo();
   	LogLn("LCD Started");
