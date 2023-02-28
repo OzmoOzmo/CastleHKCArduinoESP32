@@ -89,9 +89,6 @@ String TelegramAPI::sendGetToTelegram(const String& command)
   }
   if (client.connected()) {
 
-    #ifdef TELEGRAM_DEBUG  
-        LogLn("sending: " + command); //]sending: bot6210358051:AAHMnu-Ffj_JkrYB8ZCE7Mhoaawsf8AEG1A/getUpdates?offset=421984839&limit=1
-    #endif  
     client.print(F("GET /"));
     client.print(command);
     client.println(F(" HTTP/1.1"));
@@ -180,27 +177,13 @@ String TelegramAPI::getUpdates()
   }
   else
   {
-    //eg. {"ok":true,"result":[]}
-    //eg. {"ok":true,"result":[
-    //      {"update_id":421984839,"message":{"message_id":9,"from":{"id":5872930423,"is_bot":false,"first_name":"A",
-    //        "last_name":"Clarke","language_code":"en"},"chat":{"id":5872930423,"first_name":"A","last_name":"Clarke",
-    //        "type":"private"},"date":1676942020,"text":"/ledon","entities":[{"offset":0,"length":6,"type":"bot_command"}]}}
-    //    ]}
-    
-    //Or:
-    //Recv:{"ok":true,"result":[{"update_id":421984863,
-    //"my_chat_member":{"chat":{"id":5872930423,"first_name":"A","last_name":"Clarke","type":"private"},
-    // "from":{"id":5872930423,"is_bot":false,"first_name":"A","last_name":"Clarke","language_code":"en"},"date":1677102562,
-    // "old_chat_member":{"user":{"id":6210358051,"is_bot":true,"first_name":"CastleHKCBot","username":"CastleHKCBot"},"status":"member"},
-    //  "new_chat_member":{"user":{"id":6210358051,"is_bot":true,"first_name":"CastleHKCBot","username":"CastleHKCBot"},"status":"kicked","until_date":0}}}]}
-    //ID:421984863    UsrID:5872930423  TEXT:
 
     //look for   "result":[{" //then will have results
     if (response.indexOf("\"result\":[{\"") >= 0)
     {//there will be Only 1 Message - as we have Limit set to 1 in query
       int msgCount = 0;
-      const String _ID = "\"update_id\":"; //want "update_id":421984839,
-      const String _UsrID = "\"from\":{\"id\":"; //want "from":{"id":5872930423,
+      const String _ID = "\"update_id\":"; //want "update_id":4200000,
+      const String _UsrID = "\"from\":{\"id\":"; //want "from":{"id":5800000,
       const String _TXT= "\"text\":\"";    //want "text":"/ledon",
 
       String sID = midString(response, _ID, ","); //,p
@@ -237,7 +220,6 @@ String TelegramAPI::getUpdates()
 }
 
 bool TelegramAPI::checkForOkResponse(const String& response) {
-  //{"ok":true,"result":{"message_id":43,"from":{"id":6210358051,"is_bot":true,"first_name":"CastleHKCBot","username":"CastleHKCBot"},"chat":{"id":5872930423,"first_name":"A","last_name":"Clarke","type":"private"},"date":1677036456,"text":"Led is ON"}}
   #ifdef TELEGRAM_DEBUG 
   LogLn("Response:"+response);
   #endif
